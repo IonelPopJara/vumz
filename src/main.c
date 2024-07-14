@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <locale.h>
 
 #include <spa/param/audio/format-utils.h>
 #include <pipewire/pipewire.h>
@@ -34,6 +35,27 @@ float raw_right_channel_data = 0.0f;
 
 float sensitivity = 150.0f;
 /* GLOBAL VARIABLES */
+
+static float vu_height_to_db(int input_height, int vu_height)
+{
+    // This is so stupid, but I can't be bothered now
+    return ((((float) input_height / (float) vu_height)) * 60.0f) - 60.0f; 
+}
+
+static int db_to_vu_height(float db, int vu_height)
+{
+    if (db <= -60.0f)
+    {
+        db = -60.0f;
+    }
+
+    if (db >= 0.0f)
+    {
+        db = 0.0f;
+    }
+
+    return (int)(((db + 60.0f) / 60.0f) * vu_height);
+}
 
 /* NCURSES */
 WINDOW *create_newwin(int height, int width, int starty, int startx);
@@ -77,6 +99,7 @@ static void do_quit(void *userdata, int signal_number);
 // Main (idk why I put this)
 int main(int argc, char **argv)
 {
+    setlocale(LC_ALL, "");
     /* Pipewire */
     struct data data = { 0, };
     const struct spa_pod *params[1];
@@ -275,35 +298,50 @@ void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, i
 
 void draw_vumeter_data(WINDOW* local_win, int data, int height, int width, int starty, int startx)
 {
+    // data = input_height
+    // height = vu_meter_height
+
+    vu_height_to_db(data, height);
+
+    // TODO: This is ok but kinda stupid, I should fix
+    int green_threshold = db_to_vu_height(-30,vumeter_border_height);
+    int yellow_threshold = db_to_vu_height(-15,vumeter_border_height);
+
     for (int i = 0; i < height; i++)
     {
-        // TODO: Apply color here according to i
-
+        // Apply color here according to db
         if (i < data)
         {
-            if (i < 7)
+            if (i < green_threshold)
             {
                 //green
                 wattron(local_win, COLOR_PAIR(1));
                 // Draw a '*'
-                mvwprintw(local_win, starty - i, startx, "**");
+                mvwprintw(local_win, starty - i, startx, "▒▒");
                 wattroff(local_win, COLOR_PAIR(1));
             }
-            else
+            else if (i < yellow_threshold)
             {
                 //yellow
                 wattron(local_win, COLOR_PAIR(2));
                 // Draw a '*'
-                mvwprintw(local_win, starty - i, startx, "**");
-
+                mvwprintw(local_win, starty - i, startx, "▒▒");
                 wattroff(local_win, COLOR_PAIR(2));
+            }
+            else
+            {
+                //yellow
+                wattron(local_win, COLOR_PAIR(3));
+                // Draw a '*'
+                mvwprintw(local_win, starty - i, startx, "▒▒");
+                wattroff(local_win, COLOR_PAIR(3));
             }
 
         }
         else
         {
             // Otherwise, draw a ' '
-            mvwprintw(local_win, starty - i, startx, "  ");
+            mvwprintw(local_win, starty - i, startx, "░░");
         }
     }
 
@@ -317,7 +355,6 @@ void cleanup_ncurses()
 /* NCURSES */
 
 /* PIPEWIRE */
-
 static float amplitude_to_db(float amplitude)
 {
     if (amplitude <= 0.0f)
@@ -328,20 +365,17 @@ static float amplitude_to_db(float amplitude)
     return 20.0f * log10f(amplitude);
 }
 
-static int db_to_vu_height(float db, int vu_height)
+
+
+
+
+float lerp_factor = 0.1f;
+
+int lerp(int start, int end, float percent)
 {
-    if (db <= -60.0f)
-    {
-        db = -60.0f;
-    }
-
-    if (db >= 0.0f)
-    {
-        db = 0.0f;
-    }
-
-    return (int)(((db + 60.0f) / 60.0f) * vu_height);
+    return start + percent + (end - start);
 }
+
 static void on_process(void *userdata)
 {
     struct data *data = userdata;
@@ -366,12 +400,8 @@ static void on_process(void *userdata)
     n_samples = buf->datas[0].chunk->size / sizeof(float);
 
     /* NOTE:
-     * I don't know if I missed something in the documentation but the
-     * amplitude of each sample seems to be in the interval [-0.5, 0.5].
-     *
-     * In theory, it would make sense for it to go from [-1, 1] but there
-     * has to be some preprocessing done to it. Or maybe it's just like this
-     * because the audio signals are not "strong" enough, which is good.
+     * I don't think lerp is a good choice for smoothing the movement
+     * but it'll have to do for now
      */
     for (c = 0; c < data->format.info.raw.channels; c++)
     {
@@ -389,16 +419,20 @@ static void on_process(void *userdata)
             current_left_channel_volume = peak;
             raw_left_channel_data = max;
 
-            // TODO: add lerp here
-            current_left_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
+            // Smooth out values
+            int target_left_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
+
+            current_left_volume_height = lerp(current_left_volume_height, target_left_volume_height, lerp_factor);
         }
         else if (c == 1)
         {
+            // TODO: refactor this, I can simplify it fs
             current_right_channel_volume = peak;
             raw_right_channel_data = max;
 
-            // TODO: add lerp here
-            current_right_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
+            int target_right_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
+
+            current_right_volume_height = lerp(current_right_volume_height, target_right_volume_height, lerp_factor);
         }
     }
 
