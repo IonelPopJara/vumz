@@ -5,7 +5,7 @@
 /* TODO:
  * [ ] Add smooth transition between values
  * [ ] Add sensitivity adjust
- * [ ] Use actual math to calculate the volume scale
+ * [x] Use actual math to calculate the volume scale
  */
 
 #include <ncurses.h>
@@ -25,6 +25,9 @@ int vumeter_border_height = 0;
 
 int current_left_channel_volume = 0;
 int current_right_channel_volume = 0;
+
+int current_left_volume_height = 0;
+int current_right_volume_height = 0;
 
 float raw_left_channel_data = 0.0f;
 float raw_right_channel_data = 0.0f;
@@ -184,21 +187,21 @@ int main(int argc, char **argv)
     while (1)
     {
 
-        // pw_main_loop_run(data.loop);
-        //pw_main_loop_get_loop//
         pw_loop_iterate(pw_main_loop_get_loop(data.loop), 0);
 
         // Using a random number just to test
         // int LVolume_data = rand() % (LINES - 2);
         // int RVolume_data = rand() % (LINES - 2);
+        //current_right_volume_height
 
+        // draw_debug_info(win_debug, 2, current_left_volume_height, current_left_volume_height);
         draw_debug_info(win_debug, 2, raw_left_channel_data, raw_right_channel_data);
 
         //TODO: Account for scaling
         // attron(COLOR_PAIR(1));
 
-        draw_vumeter_data(win_vumeter, current_left_channel_volume, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, LVumeter_border_startx - 1);
-        draw_vumeter_data(win_vumeter, current_right_channel_volume, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, RVumeter_border_startx - 1);
+        draw_vumeter_data(win_vumeter, current_left_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, LVumeter_border_startx - 1);
+        draw_vumeter_data(win_vumeter, current_right_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, RVumeter_border_startx - 1);
 
         // attroff(COLOR_PAIR(1));
         // usleep(80000);
@@ -314,6 +317,31 @@ void cleanup_ncurses()
 /* NCURSES */
 
 /* PIPEWIRE */
+
+static float amplitude_to_db(float amplitude)
+{
+    if (amplitude <= 0.0f)
+    {
+        return -60.0f;
+    }
+
+    return 20.0f * log10f(amplitude);
+}
+
+static int db_to_vu_height(float db, int vu_height)
+{
+    if (db <= -60.0f)
+    {
+        db = -60.0f;
+    }
+
+    if (db >= 0.0f)
+    {
+        db = 0.0f;
+    }
+
+    return (int)(((db + 60.0f) / 60.0f) * vu_height);
+}
 static void on_process(void *userdata)
 {
     struct data *data = userdata;
@@ -337,6 +365,14 @@ static void on_process(void *userdata)
     n_channels = data->format.info.raw.channels;
     n_samples = buf->datas[0].chunk->size / sizeof(float);
 
+    /* NOTE:
+     * I don't know if I missed something in the documentation but the
+     * amplitude of each sample seems to be in the interval [-0.5, 0.5].
+     *
+     * In theory, it would make sense for it to go from [-1, 1] but there
+     * has to be some preprocessing done to it. Or maybe it's just like this
+     * because the audio signals are not "strong" enough, which is good.
+     */
     for (c = 0; c < data->format.info.raw.channels; c++)
     {
         max = 0.0f;
@@ -351,12 +387,18 @@ static void on_process(void *userdata)
         if (c == 0)
         {
             current_left_channel_volume = peak;
-            raw_left_channel_data = max; 
+            raw_left_channel_data = max;
+
+            // TODO: add lerp here
+            current_left_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
         }
         else if (c == 1)
         {
             current_right_channel_volume = peak;
-            raw_right_channel_data = max; 
+            raw_right_channel_data = max;
+
+            // TODO: add lerp here
+            current_right_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
         }
     }
 
