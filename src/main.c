@@ -1,14 +1,16 @@
 /*
- * VUMZ (VU Meter Audio Visualizer) 
+ * VUMZ (VU Meter visualiZer)
  */
 
 /* TODO:
- * [ ] Add smooth transition between values
- * [ ] Add sensitivity adjust
- * [x] Use actual math to calculate the volume scale
+    * [ ] Add debug flag
+    * [ ] Add screensaver mode
+    * [ ] Fix scaling
+    * [ ] Add sensitivity adjustment
  */
 
 #include <ncurses.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,41 +23,27 @@
 #define DEBUG_MIN_HEIGHT 7
 #define DEBUG_MIN_WIDTH 25
 
-/* GLOBAL VARIABLES */
-int vumeter_border_height = 0;
+#define VUMETER_GREEN_THRESHOLD_DB -30.0f
+#define VUMETER_YELLOW_THRESHOLD_DB -15.0f
 
-int current_left_channel_volume = 0;
-int current_right_channel_volume = 0;
+/* VARIABLES */
+int vumeter_border_height = 0;
 
 int current_left_volume_height = 0;
 int current_right_volume_height = 0;
 
-float raw_left_channel_data = 0.0f;
-float raw_right_channel_data = 0.0f;
+float raw_left_channel_amplitude = 0.0f;
+float raw_right_channel_amplitude = 0.0f;
+
+int green_threshold_height = 0;
+int yellow_threshold_height = 0;
 
 float sensitivity = 150.0f;
-/* GLOBAL VARIABLES */
+/* VARIABLES */
 
-static float vu_height_to_db(int input_height, int vu_height)
-{
-    // This is so stupid, but I can't be bothered now
-    return ((((float) input_height / (float) vu_height)) * 60.0f) - 60.0f; 
-}
-
-static int db_to_vu_height(float db, int vu_height)
-{
-    if (db <= -60.0f)
-    {
-        db = -60.0f;
-    }
-
-    if (db >= 0.0f)
-    {
-        db = 0.0f;
-    }
-
-    return (int)(((db + 60.0f) / 60.0f) * vu_height);
-}
+/* UTIL */
+static int db_to_vu_height(float db, int vu_height);
+/* UTIL */
 
 /* NCURSES */
 WINDOW *create_newwin(int height, int width, int starty, int startx);
@@ -82,9 +70,6 @@ struct data {
 
 static void on_process(void *userdata);
 
-/* Be notified when the stream param changes. We're only looking at
- * the format changes.
- */
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param);
 
 static const struct pw_stream_events stream_events = {
@@ -96,11 +81,11 @@ static const struct pw_stream_events stream_events = {
 static void do_quit(void *userdata, int signal_number);
 /* PIPEWIRE */
 
-// Main (idk why I put this)
 int main(int argc, char **argv)
 {
-    setlocale(LC_ALL, "");
-    /* Pipewire */
+    setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
+
+    /* Pipewire config */
     struct data data = { 0, };
     const struct spa_pod *params[1];
     uint8_t buffer[1024];
@@ -115,15 +100,14 @@ int main(int argc, char **argv)
     pw_loop_add_signal(pw_main_loop_get_loop(data.loop), SIGINT, do_quit, &data);
     pw_loop_add_signal(pw_main_loop_get_loop(data.loop), SIGTERM, do_quit, &data);
 
-    // Create a simplel stream
+    // Create a simple stream
     props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio",
                               PW_KEY_CONFIG_NAME, "client-rt.conf",
                               PW_KEY_MEDIA_CATEGORY, "Capture",
                               PW_KEY_MEDIA_ROLE, "Music",
                               NULL);
 
-    // To capture from the sink monitor ports
-    pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");
+    pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");  // Enable capture from the sink monitor ports
 
     data.stream = pw_stream_new_simple(
         pw_main_loop_get_loop(data.loop),
@@ -144,16 +128,17 @@ int main(int argc, char **argv)
                       PW_STREAM_FLAG_MAP_BUFFERS |
                       PW_STREAM_FLAG_RT_PROCESS,
                       params, 1);
-    /* Pipewire */
+    /* Pipewire config */
 
-    WINDOW *win_debug;
-    WINDOW *win_vumeter;
+    /* Ncurses config */
+    WINDOW *win_debug; // Window that will display debug information when the verbose flag is enabled
+    WINDOW *win_vumeter; // Window that will display the VU Meter
 
-    short xpos_offset = 2;
-    short ypos_offset = 1;
+    short xpos_win_offset = 2; // Offset for the x position of the windows
+    short ypos_win_offset = 1; // Offset for the y position of the windows
 
-    int height_debug, width_debug, starty_debug, startx_debug;
-    int height_vumeter, width_vumeter, starty_vumeter, startx_vumeter;
+    int height_win_debug, width_win_debug, starty_win_debug, startx_win_debug;
+    int height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter;
 
     initscr();              /* Start curses mode */
     raw();                  /* Line buffering disabled */
@@ -163,87 +148,88 @@ int main(int argc, char **argv)
     cbreak();               /* Don't wait for new lines to read input */
     start_color();          /* Start color */
 
-    init_pair(1, COLOR_GREEN, COLOR_BLACK);
-    init_pair(2, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(3, COLOR_RED, COLOR_BLACK);
+    init_pair(1, COLOR_GREEN, COLOR_BLACK); // First color pair, this will be used for the lower volume levels
+    init_pair(2, COLOR_YELLOW, COLOR_BLACK); // Second color pair, this will be used for the medium volume levels
+    init_pair(3, COLOR_RED, COLOR_BLACK); // Third color pair, this will be used for the higher volume levels
+    /* Ncurses config */
 
     // Define height, width, and starting position for the debug window
-    height_debug = LINES / 5;
-    width_debug = COLS / 2;
-    starty_debug = ypos_offset;
-    startx_debug = xpos_offset;
+    height_win_debug = LINES / 5;
+    width_win_debug = COLS / 2;
+    starty_win_debug = ypos_win_offset;
+    startx_win_debug = xpos_win_offset;
 
     // Define height, width, and starting position for the vumeter window
-    height_vumeter = LINES - 2;
-    width_vumeter = COLS - 4;
-    starty_vumeter = ypos_offset;
-    startx_vumeter = xpos_offset;
+    height_win_vumeter = LINES - 2;
+    width_win_vumeter = COLS - 4;
+    starty_win_vumeter = ypos_win_offset;
+    startx_win_vumeter = xpos_win_offset;
 
-    refresh();
+    refresh(); // Refresh the screen
 
     // NOTE: The rendering order matters
-
     // Create the vumeter window
-    win_vumeter = create_newwin(height_vumeter, width_vumeter, starty_vumeter, startx_vumeter);
-
+    win_vumeter = create_newwin(height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter);
     // Create the debug window
-    win_debug = create_newwin(height_debug, width_debug, starty_debug, startx_debug);
+    win_debug = create_newwin(height_win_debug, width_win_debug, starty_win_debug, startx_win_debug);
 
-    draw_debug_info(win_debug, 2, height_debug, width_debug);
+    draw_debug_info(win_debug, 2, height_win_debug, width_win_debug);
 
     // Calculate vumeters coordinates
-    // NOTE: this is the height of the vumeter itself, not the vumeter window
-    // This is confusing and will need refactoring
-    // NOTE: #2 I should probably account for scaling again...
-    vumeter_border_height = height_vumeter - 2;
+    vumeter_border_height = height_win_vumeter - 2;
     int vumeter_border_width = 2;
 
-    int vumeter_border_starty = height_vumeter - 1;
-    int LVumeter_border_startx = (width_vumeter / 2) - vumeter_border_width - 1;
-    int RVumeter_border_startx = (width_vumeter / 2) + vumeter_border_width + 1;
+    int vumeter_border_starty = height_win_vumeter - 1;
+    int left_vumeter_border_startx = (width_win_vumeter / 2) - vumeter_border_width - 1;
+    int right_vumeter_border_startx = (width_win_vumeter / 2) + vumeter_border_width + 1;
+
+    // Calculate the thresholds for the VU Meter
+    green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, vumeter_border_height);
+    yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, vumeter_border_height);
 
     // window, height, width, starting x, starting y
-    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, LVumeter_border_startx);
-    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, RVumeter_border_startx);
+    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
+    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
 
-    //TODO: Check here for audio buffer
-    while (1)
+    while (true)
     {
-
         pw_loop_iterate(pw_main_loop_get_loop(data.loop), 0);
 
-        // Using a random number just to test
-        // int LVolume_data = rand() % (LINES - 2);
-        // int RVolume_data = rand() % (LINES - 2);
-        //current_right_volume_height
+        draw_debug_info(win_debug, 2, raw_left_channel_amplitude, raw_right_channel_amplitude);
 
-        // draw_debug_info(win_debug, 2, current_left_volume_height, current_left_volume_height);
-        draw_debug_info(win_debug, 2, raw_left_channel_data, raw_right_channel_data);
-
-        //TODO: Account for scaling
-        // attron(COLOR_PAIR(1));
-
-        draw_vumeter_data(win_vumeter, current_left_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, LVumeter_border_startx - 1);
-        draw_vumeter_data(win_vumeter, current_right_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, RVumeter_border_startx - 1);
-
-        // attroff(COLOR_PAIR(1));
-        // usleep(80000);
+        draw_vumeter_data(win_vumeter, current_left_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, left_vumeter_border_startx - 1);
+        draw_vumeter_data(win_vumeter, current_right_volume_height, vumeter_border_height - 1, vumeter_border_width, vumeter_border_starty - 1, right_vumeter_border_startx - 1);
     }
-
-    refresh();
-    getch();
 
     // Destroy windows
     destroy_win(win_debug);
     destroy_win(win_vumeter);
     endwin();
 
+    // Stop pipewire stream
     pw_stream_destroy(data.stream);
     pw_main_loop_destroy(data.loop);
     pw_deinit();
 
     return 0;
 }
+
+/* UTIL */
+static int db_to_vu_height(float db, int vu_height)
+{
+    if (db <= -60.0f)
+    {
+        db = -60.0f;
+    }
+
+    if (db >= 0.0f)
+    {
+        db = 0.0f;
+    }
+
+    return (int)(((db + 60.0f) / 60.0f) * vu_height);
+}
+/* UTIL */
 
 /* NCURSES */
 WINDOW *create_newwin(int height, int width, int starty, int startx)
@@ -275,7 +261,7 @@ void draw_debug_info(WINDOW *local_win, int channels, float left, float right)
 }
 
 void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, int startx)
-{ 
+{
     int i = 0;
 
     // Draw the border of the vumeter
@@ -298,33 +284,24 @@ void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, i
 
 void draw_vumeter_data(WINDOW* local_win, int data, int height, int width, int starty, int startx)
 {
-    // data = input_height
-    // height = vu_meter_height
-
-    vu_height_to_db(data, height);
-
-    // TODO: This is ok but kinda stupid, I should fix
-    int green_threshold = db_to_vu_height(-30,vumeter_border_height);
-    int yellow_threshold = db_to_vu_height(-15,vumeter_border_height);
-
     for (int i = 0; i < height; i++)
     {
         // Apply color here according to db
         if (i < data)
         {
-            if (i < green_threshold)
+            if (i < green_threshold_height)
             {
                 //green
                 wattron(local_win, COLOR_PAIR(1));
-                // Draw a '*'
+                // Draw a "▒▒";
                 mvwprintw(local_win, starty - i, startx, "▒▒");
                 wattroff(local_win, COLOR_PAIR(1));
             }
-            else if (i < yellow_threshold)
+            else if (i < yellow_threshold_height)
             {
                 //yellow
                 wattron(local_win, COLOR_PAIR(2));
-                // Draw a '*'
+                // Draw a "▒▒";
                 mvwprintw(local_win, starty - i, startx, "▒▒");
                 wattroff(local_win, COLOR_PAIR(2));
             }
@@ -332,11 +309,10 @@ void draw_vumeter_data(WINDOW* local_win, int data, int height, int width, int s
             {
                 //yellow
                 wattron(local_win, COLOR_PAIR(3));
-                // Draw a '*'
+                // Draw a "▒▒";
                 mvwprintw(local_win, starty - i, startx, "▒▒");
                 wattroff(local_win, COLOR_PAIR(3));
             }
-
         }
         else
         {
@@ -365,10 +341,6 @@ static float amplitude_to_db(float amplitude)
     return 20.0f * log10f(amplitude);
 }
 
-
-
-
-
 float lerp_factor = 0.1f;
 
 int lerp(int start, int end, float percent)
@@ -382,7 +354,7 @@ static void on_process(void *userdata)
     struct pw_buffer *b;
     struct spa_buffer *buf;
     float *samples, max;
-    uint32_t c, n, n_channels, n_samples, peak;
+    uint32_t c, n, n_channels, n_samples;
 
     if ((b = pw_stream_dequeue_buffer(data->stream)) == NULL)
     {
@@ -411,27 +383,22 @@ static void on_process(void *userdata)
             max = fmaxf(max, fabsf(samples[n]));
         }
 
-        // Normalized value
-        peak = SPA_CLAMP(max * sensitivity, 0, vumeter_border_height);
-
         if (c == 0)
         {
-            current_left_channel_volume = peak;
-            raw_left_channel_data = max;
+            // Store the amplitude for debugging purposes
+            raw_left_channel_amplitude = max;
 
-            // Smooth out values
+            // Smooth out values for the left channel so it doesn't jump around too much
             int target_left_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
-
             current_left_volume_height = lerp(current_left_volume_height, target_left_volume_height, lerp_factor);
         }
         else if (c == 1)
         {
-            // TODO: refactor this, I can simplify it fs
-            current_right_channel_volume = peak;
-            raw_right_channel_data = max;
+            // Store the amplitude for debugging purposes
+            raw_right_channel_amplitude = max;
 
+            // Smooth out values for the right channel so it doesn't jump around too much
             int target_right_volume_height = db_to_vu_height(amplitude_to_db(max), vumeter_border_height);
-
             current_right_volume_height = lerp(current_right_volume_height, target_right_volume_height, lerp_factor);
         }
     }
@@ -488,4 +455,3 @@ static void do_quit(void *userdata, int signal_number)
     exit(EXIT_SUCCESS);
 }
 /* PIPEWIRE */
-
