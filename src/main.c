@@ -6,7 +6,7 @@
     * [x] Add debug flag
     * [x] Add screensaver mode
     * [x] Fix scaling
-    * [ ] Add sensitivity adjustment
+    * [x] Add sensitivity adjustment
  */
 
 #include <ncurses.h>
@@ -26,8 +26,10 @@
 #define VUMETER_GREEN_THRESHOLD_DB -30.0f
 #define VUMETER_YELLOW_THRESHOLD_DB -15.0f
 
-#define DEBUG_WIN_HEIGHT 7;
+#define DEBUG_WIN_HEIGHT 8;
 #define DEBUG_WIN_WIDTH 19;
+
+#define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 
 /* Structs */
 /* In order to properly process the data from the stream
@@ -64,40 +66,29 @@ struct ncurses_window {
 };
 /* Structs */
 
-int vumeter_border_height = 0;
-
-int current_left_volume_height = 0;
-int current_right_volume_height = 0;
-
 int green_threshold_height = 0;
 int yellow_threshold_height = 0;
-
-float sensitivity = 150.0f;
-/* VU Meter */
+float smooth_factor = 1.0f;
 
 /* UTIL */
 static int db_to_vu_height(float db, int vu_height);
+static float amplitude_to_db(float amplitude);
+// The smooth fuction uses Exponential Moving Average (EMA) for now
+static int smooth(int previous, int current, float factor);
 /* UTIL */
 
 /* NCURSES */
 void init_ncurses();
-
 WINDOW *create_newwin(int height, int width, int starty, int startx);
-
 void destroy_win(WINDOW *local_win);
-
 void draw_debug_info(WINDOW *local_win, void* vumeter_data);
-
-void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, int startx);
-
-void draw_vumeter_data(WINDOW* local_win, int channel_dbs, int height, int width, int starty, int startx);
-
+void draw_vumeter_border(WINDOW* local_win, void* vumeter);
+void draw_vumeter_data(WINDOW* local_win, int channel_dbs, void *vumeter);
 void cleanup_ncurses();
 /* NCURSES */
 
 /* PIPEWIRE */
 static void on_process(void *vumeter_data);
-
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param);
 
 static const struct pw_stream_events stream_events = {
@@ -176,9 +167,7 @@ int main(int argc, char **argv)
 
     /* Ncurses config */
     init_ncurses();
-    /* Ncurses config */
 
-    /* Ncurses windows */
     struct ncurses_window win_vumeter = {0};    // Window to render the vumeter
     struct ncurses_window win_debug = {0};      // Window to render the debug information
 
@@ -205,30 +194,27 @@ int main(int argc, char **argv)
         win_debug.win = create_newwin(win_debug.height, win_debug.width, win_debug.starty, win_debug.startx);
     }
 
-    /* Vumeter Initialization */
+    // Left vumeter
     struct vumeter left_vumeter = {0};
     left_vumeter.height = win_vumeter.height;
     left_vumeter.width = 2;
     left_vumeter.starty = 0;
     left_vumeter.startx = (win_vumeter.width / 2) - left_vumeter.width - 3;
-    /* Vumeter Initialization */
 
-    // Calculate vumeters coordinates
-    vumeter_border_height = win_vumeter.height;
-    int vumeter_border_width = 2;
-
-    int vumeter_border_starty = 0;
-    int left_vumeter_border_startx = (win_vumeter.width / 2) - vumeter_border_width - 3;
-    int right_vumeter_border_startx = (win_vumeter.width / 2) + vumeter_border_width - 1;
+    // Right vumeter
+    struct vumeter right_vumeter = {0};
+    right_vumeter.height = win_vumeter.height;
+    right_vumeter.width = 2;
+    right_vumeter.starty = 0;
+    right_vumeter.startx = (win_vumeter.width / 2) + right_vumeter.width - 1;
 
     // Calculate the thresholds for the VU Meter
-    green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, vumeter_border_height);
-    yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, vumeter_border_height);
+    green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, win_vumeter.height);
+    yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, win_vumeter.height);
 
-    // window, height, width, starting x, starting y
-    draw_vumeter_border(win_vumeter.win, left_vumeter.height, left_vumeter.width, left_vumeter.starty, left_vumeter.startx);
-    // draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
-    draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+    draw_vumeter_border(win_vumeter.win, &left_vumeter);        // Draw the left vumeter border
+    draw_vumeter_border(win_vumeter.win, &right_vumeter);       // Draw the right vumeter border
+    /* Ncurses config */
 
     while (true)
     {
@@ -237,12 +223,26 @@ int main(int argc, char **argv)
         if (debug_mode)
             draw_debug_info(win_debug.win, &data);
 
-        draw_vumeter_data(win_vumeter.win, data.left_channel_dbs, left_vumeter.height, left_vumeter.width, left_vumeter.starty, left_vumeter.startx);
-        // draw_vumeter_data(win_vumeter.win, data.right_channel_dbs, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+        draw_vumeter_data(win_vumeter.win, data.left_channel_dbs, &left_vumeter);
+        draw_vumeter_data(win_vumeter.win, data.right_channel_dbs, &right_vumeter);
 
         if (screensaver_mode && getch() != ERR)
         {
             break;
+        }
+        else if (!screensaver_mode)
+        {
+            int c = getch();
+            switch (c) {
+                case KEY_UP:
+                    smooth_factor += 0.05;
+                    break;
+                case KEY_DOWN:
+                    smooth_factor -= 0.05;
+                    break;
+            }
+
+            smooth_factor = CLAMP(smooth_factor, 0, 1);
         }
     }
 
@@ -274,10 +274,24 @@ static int db_to_vu_height(float db, int vu_height)
 
     return (int)(((db + 60.0f) / 60.0f) * vu_height);
 }
+
+static float amplitude_to_db(float amplitude)
+{
+    if (amplitude <= 0.0f)
+    {
+        return -60.0f;
+    }
+
+    return 20.0f * log10f(amplitude);
+}
+
+static int smooth(int previous, int current, float factor)
+{
+    return (int)(previous * (1.0f - factor) + current * factor);
+}
 /* UTIL */
 
 /* NCURSES */
-
 void init_ncurses()
 {
     initscr();              /* Start curses mode */
@@ -326,12 +340,20 @@ void draw_debug_info(WINDOW *local_win, void *vumeter_data)
     mvwprintw(local_win, 3, 2, "Channels: %d", data->n_channels);
     mvwprintw(local_win, 4, 2, "|- L: %.2f dB", data->left_channel_dbs);
     mvwprintw(local_win, 5, 2, "|- R: %.2f dB", data->right_channel_dbs);
+    mvwprintw(local_win, 6, 2, "smooth: %.2f", smooth_factor);
     wattroff(local_win, COLOR_PAIR(5));
     wrefresh(local_win);
 }
 
-void draw_vumeter_border(WINDOW *local_win, int height, int width, int starty, int startx)
+void draw_vumeter_border(WINDOW *local_win, void* vumeter)
 {
+    struct vumeter * current_vumeter = (struct vumeter *)vumeter;
+
+    int height = current_vumeter->height;
+    int width = current_vumeter->width;
+    int starty = current_vumeter->starty;
+    int startx = current_vumeter->startx;
+
     int i = 0;
 
     // Draw the top border of the vumeter
@@ -359,23 +381,29 @@ void draw_vumeter_border(WINDOW *local_win, int height, int width, int starty, i
     wrefresh(local_win);
 }
 
-void draw_vumeter_data(WINDOW* local_win, int channel_dbs, int height, int width, int starty, int startx)
+void draw_vumeter_data(WINDOW* local_win, int channel_dbs, void *vumeter)
 {
-    // Smooth out values for the left channel so it doesn't jump around too much
+    struct vumeter *current_vumeter = (struct vumeter *)vumeter;
+    int height = current_vumeter->height;
+    int starty = current_vumeter->starty;
+    int startx = current_vumeter->startx;
+
     int target_height = db_to_vu_height(channel_dbs, height);
+    current_vumeter->fill_height = smooth(current_vumeter->fill_height, target_height, smooth_factor);
+    int current_height = current_vumeter->fill_height;
 
     startx++;
     starty++;
     for (int i = 0; i < height - 2; i++)
     {
-        // Let's say target_height is 10, which means that we need to draw 10 lines and height is 20
+        // Let's say current_height is 10, which means that we need to draw 10 lines and height is 20
         // We start from the top of the vumeter, and we have to draw the bottom 10 lines with color
-        // if i = 0, height - i = 20, 20 > 10 (target_height), no color
-        // if i = 10, height - i = 10, 10 = 10 (target_height), color
-        // if i = 11, height - i = 9, 9 < 10 (target_height), color
-        // therefore, as long as height - i < target_height, we need to apply color
+        // if i = 0, height - i = 20, 20 > 10 (current_height), no color
+        // if i = 10, height - i = 10, 10 = 10 (current_height), color
+        // if i = 11, height - i = 9, 9 < 10 (current_height), color
+        // therefore, as long as height - i < current_height, we need to apply color
         // Apply color according to db
-        if (height - i < target_height)
+        if (height - i < current_height)
         {
             if (height - i < green_threshold_height)
             {
@@ -417,23 +445,6 @@ void cleanup_ncurses()
 /* NCURSES */
 
 /* PIPEWIRE */
-static float amplitude_to_db(float amplitude)
-{
-    if (amplitude <= 0.0f)
-    {
-        return -60.0f;
-    }
-
-    return 20.0f * log10f(amplitude);
-}
-
-float lerp_factor = 0.1f;
-
-int lerp(int start, int end, float percent)
-{
-    return start + percent + (end - start);
-}
-
 static void on_process(void *vumeter_data)
 {
     struct pipewire_data *data = vumeter_data;
@@ -459,10 +470,6 @@ static void on_process(void *vumeter_data)
 
     data->n_channels = n_channels;
 
-    /* NOTE:
-     * I don't think lerp is a good choice for smoothing the movement
-     * but it'll have to do for now
-     */
     for (c = 0; c < data->format.info.raw.channels; c++)
     {
         max = 0.0f;
@@ -476,31 +483,19 @@ static void on_process(void *vumeter_data)
             // Store the decibels for debugging purposes
             float left_channel_dbs = amplitude_to_db(max);
             data->left_channel_dbs = left_channel_dbs;
-
-            // Smooth out values for the left channel so it doesn't jump around too much
-            int target_left_volume_height = db_to_vu_height(left_channel_dbs, vumeter_border_height);
-            current_left_volume_height = lerp(current_left_volume_height, target_left_volume_height, lerp_factor);
         }
         else if (c == 1)
         {
             // Store the decibels for debugging purposes
             float right_channel_dbs = amplitude_to_db(max);
             data->right_channel_dbs = right_channel_dbs;
-
-            // Smooth out values for the right channel so it doesn't jump around too much
-            int target_right_volume_height = db_to_vu_height(right_channel_dbs, vumeter_border_height);
-            current_right_volume_height = lerp(current_right_volume_height, target_right_volume_height, lerp_factor);
         }
     }
 
     fflush(stdout);
     pw_stream_queue_buffer(data->stream, b);
 }
-/* [on_process] */
 
-/* Be notified when the stream param changes. We're only looking at
- * the format changes.
- */
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param)
 {
     struct pipewire_data *data = _data;
@@ -525,9 +520,6 @@ static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_p
 
     /* call a helper function to parse the format for us */
     spa_format_audio_raw_parse(param, &data->format.info.raw);
-
-    // fprintf(stdout, "capturing rate:%d channels:%d\n",
-            // data->format.info.raw.rate, data->format.info.raw.channels);
 }
 
 static void do_quit(void *userdata, int signal_number)
