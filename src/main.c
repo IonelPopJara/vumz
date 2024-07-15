@@ -3,8 +3,8 @@
  */
 
 /* TODO:
-    * [ ] Add debug flag
-    * [ ] Add screensaver mode
+    * [x] Add debug flag
+    * [x] Add screensaver mode
     * [x] Fix scaling
     * [ ] Add sensitivity adjustment
  */
@@ -29,7 +29,25 @@
 #define DEBUG_WIN_HEIGHT 7;
 #define DEBUG_WIN_WIDTH 19;
 
-/* VARIABLES */
+/* VU Meter */
+/* In order to properly process the data from the stream
+ * and display it on the VU Meter, I have defined this struct
+ * which will hold the stream, the loop, and the audio format,
+ * and the necessary parameters of the VU Meter.
+ * information.
+*/
+struct data {
+    // Pipewire
+    struct pw_main_loop *loop;
+    struct pw_stream *stream;
+    struct spa_audio_info format;
+    // VU Meter
+    int channels;
+    float left_channel_dbs;
+    float right_channel_dbs;
+};
+/* VU Meter */
+
 int vumeter_border_height = 0;
 
 int current_left_volume_height = 0;
@@ -42,13 +60,15 @@ int green_threshold_height = 0;
 int yellow_threshold_height = 0;
 
 float sensitivity = 150.0f;
-/* VARIABLES */
+/* VU Meter */
 
 /* UTIL */
 static int db_to_vu_height(float db, int vu_height);
 /* UTIL */
 
 /* NCURSES */
+void init_ncurses();
+
 WINDOW *create_newwin(int height, int width, int starty, int startx);
 
 void destroy_win(WINDOW *local_win);
@@ -63,14 +83,6 @@ void cleanup_ncurses();
 /* NCURSES */
 
 /* PIPEWIRE */
-struct data {
-    struct pw_main_loop *loop;
-    struct pw_stream *stream;
-
-    struct spa_audio_info format;
-    unsigned move:1;
-};
-
 static void on_process(void *userdata);
 
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param);
@@ -86,6 +98,22 @@ static void do_quit(void *userdata, int signal_number);
 
 int main(int argc, char **argv)
 {
+    bool debug_mode = false;
+    bool screensaver_mode = false;
+
+    // Check command line arguments
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-D") == 0)
+        {
+            debug_mode = true;
+        }
+        else if (strcmp(argv[i], "-S") == 0)
+        {
+            screensaver_mode = true;
+        }
+    }
+
     setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
 
     /* Pipewire config */
@@ -134,32 +162,15 @@ int main(int argc, char **argv)
     /* Pipewire config */
 
     /* Ncurses config */
-    WINDOW *win_debug; // Window that will display debug information when the verbose flag is enabled
-    WINDOW *win_vumeter; // Window that will display the VU Meter
-
-    int height_win_debug, width_win_debug, starty_win_debug, startx_win_debug;
-    int height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter;
-
-    initscr();              /* Start curses mode */
-    raw();                  /* Line buffering disabled */
-    keypad(stdscr, TRUE);   /* Enable keypad */
-    noecho();               /* Don't echo user input */
-    curs_set(0);            /* Make the cursor invisible */
-    cbreak();               /* Don't wait for new lines to read input */
-    start_color();          /* Start color */
-
-    init_pair(1, COLOR_GREEN, COLOR_BLACK); // First color pair, this will be used for the lower volume levels
-    init_pair(2, COLOR_YELLOW, COLOR_BLACK); // Second color pair, this will be used for the medium volume levels
-    init_pair(3, COLOR_RED, COLOR_BLACK); // Third color pair, this will be used for the higher volume levels
-    init_pair(4, COLOR_MAGENTA, COLOR_BLACK); // Fourth color pair, this will be used for the debug window
-    init_pair(5, COLOR_BLUE, COLOR_BLACK); // Fifth color pair, this will be used for the debug window
+    init_ncurses();
     /* Ncurses config */
 
-    // Define height, width, and starting position for the debug window
-    height_win_debug = DEBUG_WIN_HEIGHT;
-    width_win_debug = DEBUG_WIN_WIDTH;
-    starty_win_debug = 0;
-    startx_win_debug = 0;
+    // Window that will display the VU Meter
+    WINDOW *win_vumeter;     int height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter;
+
+    // Window that will display debug information when the verbose flag is enabled
+    WINDOW *win_debug;
+    int height_win_debug, width_win_debug, starty_win_debug, startx_win_debug;
 
     // Define height, width, and starting position for the vumeter window
     height_win_vumeter = LINES;
@@ -172,8 +183,17 @@ int main(int argc, char **argv)
     // NOTE: The rendering order matters
     // Create the vumeters window
     win_vumeter = create_newwin(height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter);
-    // Create the debug window
-    win_debug = create_newwin(height_win_debug, width_win_debug, starty_win_debug, startx_win_debug);
+
+    if (debug_mode)
+    {
+        // Define height, width, and starting position for the debug window
+        height_win_debug = DEBUG_WIN_HEIGHT;
+        width_win_debug = DEBUG_WIN_WIDTH;
+        starty_win_debug = 0;
+        startx_win_debug = 0;
+        // Create the debug window
+        win_debug = create_newwin(height_win_debug, width_win_debug, starty_win_debug, startx_win_debug);
+    }
 
     // Calculate vumeters coordinates
     vumeter_border_height = height_win_vumeter;
@@ -195,10 +215,16 @@ int main(int argc, char **argv)
     {
         pw_loop_iterate(pw_main_loop_get_loop(data.loop), 0);
 
-        draw_debug_info(win_debug, 2, left_channel_dbs, right_channel_dbs);
+        if (debug_mode)
+            draw_debug_info(win_debug, 2, left_channel_dbs, right_channel_dbs);
 
         draw_vumeter_data(win_vumeter, current_left_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
         draw_vumeter_data(win_vumeter, current_right_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+
+        if (screensaver_mode && getch() != ERR)
+        {
+            break;
+        }
     }
 
     // Destroy windows
@@ -232,6 +258,25 @@ static int db_to_vu_height(float db, int vu_height)
 /* UTIL */
 
 /* NCURSES */
+
+void init_ncurses()
+{
+    initscr();              /* Start curses mode */
+    raw();                  /* Line buffering disabled */
+    keypad(stdscr, TRUE);   /* Enable keypad */
+    noecho();               /* Don't echo user input */
+    curs_set(0);            /* Make the cursor invisible */
+    cbreak();               /* Don't wait for new lines to read input */
+    start_color();          /* Start color */
+    nodelay(stdscr, TRUE);  /* Set getch() to be non-blocking */
+
+    init_pair(1, COLOR_GREEN, COLOR_BLACK); // First color pair, this will be used for the lower volume levels
+    init_pair(2, COLOR_YELLOW, COLOR_BLACK); // Second color pair, this will be used for the medium volume levels
+    init_pair(3, COLOR_RED, COLOR_BLACK); // Third color pair, this will be used for the higher volume levels
+    init_pair(4, COLOR_MAGENTA, COLOR_BLACK); // Fourth color pair, this will be used for the debug window
+    init_pair(5, COLOR_BLUE, COLOR_BLACK); // Fifth color pair, this will be used for the debug window
+}
+
 WINDOW *create_newwin(int height, int width, int starty, int startx)
 {
     WINDOW* local_win;
@@ -421,9 +466,7 @@ static void on_process(void *userdata)
         }
     }
 
-    data->move = true;
     fflush(stdout);
-
     pw_stream_queue_buffer(data->stream, b);
 }
 /* [on_process] */
