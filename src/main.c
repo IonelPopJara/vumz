@@ -2,13 +2,6 @@
  * VUMZ (VU Meter visualiZer)
  */
 
-/* TODO:
-    * [x] Add debug flag
-    * [x] Add screensaver mode
-    * [x] Fix scaling
-    * [x] Add sensitivity adjustment
- */
-
 #include <ncurses.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -31,7 +24,7 @@
 
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 
-/* Structs */
+/* STRUCTS */
 /* In order to properly process the data from the stream
  * and display it on the VU Meter, I have defined this struct
  * which will hold the stream, the loop, and the audio format,
@@ -64,11 +57,15 @@ struct ncurses_window {
     int starty;
     int startx;
 };
-/* Structs */
+/* STRUCTS */
 
+/* VARIABLES */
 int green_threshold_height = 0;
 int yellow_threshold_height = 0;
 float smooth_factor = 1.0f;
+/* VARIABLES */
+
+void print_help();
 
 /* UTIL */
 static int db_to_vu_height(float db, int vu_height);
@@ -108,13 +105,23 @@ int main(int argc, char **argv)
     // Check command line arguments
     for (int i = 1; i < argc; i++)
     {
-        if (strcmp(argv[i], "-D") == 0)
+        if (strcmp(argv[i], "-D") == 0 || strcmp(argv[i], "--debug") == 0)
         {
             debug_mode = true;
         }
-        else if (strcmp(argv[i], "-S") == 0)
+        else if (strcmp(argv[i], "-S") == 0 || strcmp(argv[i], "--screensaver") == 0)
         {
             screensaver_mode = true;
+        }
+        else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
+        {
+            print_help();
+            exit(EXIT_SUCCESS);
+        }
+        else {
+            printf("error: invalid option %s\n", argv[i]);
+            print_help();
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -256,7 +263,22 @@ int main(int argc, char **argv)
     pw_main_loop_destroy(data.loop);
     pw_deinit();
 
-    return 0;
+    exit(EXIT_SUCCESS);
+}
+
+void print_help()
+{
+    printf("%s",
+        "Usage: vumz [OPTION]...\n"
+        "\n"
+        "vumz is a simple cli vumeter."
+        "\n"
+        "Options:\n"
+        "   -D, --debug         debug mode: print useful data for devs\n"
+        "   -h, --help          show help\n"
+        "   -S, --screensaver   screensaver mode: press any key to quit\n"
+        "\n"
+    );
 }
 
 /* UTIL */
