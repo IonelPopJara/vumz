@@ -47,12 +47,12 @@ struct pipewire_data {
     float right_channel_dbs;
 };
 
-struct vu_meter {
-    int border_height;
-    int left_vumeter_height;
-    int right_vumeter_height;
-    int green_threshold_height;
-    int yellow_threshold_height;
+struct vumeter {
+    int height;
+    int width;
+    int starty;
+    int startx;
+    int fill_height;
 };
 
 struct ncurses_window {
@@ -90,7 +90,7 @@ void draw_debug_info(WINDOW *local_win, void* vumeter_data);
 
 void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, int startx);
 
-void draw_vumeter_data(WINDOW* local_win, int data, int height, int width, int starty, int startx);
+void draw_vumeter_data(WINDOW* local_win, int channel_dbs, int height, int width, int starty, int startx);
 
 void cleanup_ncurses();
 /* NCURSES */
@@ -206,7 +206,11 @@ int main(int argc, char **argv)
     }
 
     /* Vumeter Initialization */
-    struct vu_meter vumeter = {0};
+    struct vumeter left_vumeter = {0};
+    left_vumeter.height = win_vumeter.height;
+    left_vumeter.width = 2;
+    left_vumeter.starty = 0;
+    left_vumeter.startx = (win_vumeter.width / 2) - left_vumeter.width - 3;
     /* Vumeter Initialization */
 
     // Calculate vumeters coordinates
@@ -222,7 +226,8 @@ int main(int argc, char **argv)
     yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, vumeter_border_height);
 
     // window, height, width, starting x, starting y
-    draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
+    draw_vumeter_border(win_vumeter.win, left_vumeter.height, left_vumeter.width, left_vumeter.starty, left_vumeter.startx);
+    // draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
     draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
 
     while (true)
@@ -232,8 +237,8 @@ int main(int argc, char **argv)
         if (debug_mode)
             draw_debug_info(win_debug.win, &data);
 
-        draw_vumeter_data(win_vumeter.win, current_left_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
-        draw_vumeter_data(win_vumeter.win, current_right_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+        draw_vumeter_data(win_vumeter.win, data.left_channel_dbs, left_vumeter.height, left_vumeter.width, left_vumeter.starty, left_vumeter.startx);
+        // draw_vumeter_data(win_vumeter.win, data.right_channel_dbs, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
 
         if (screensaver_mode && getch() != ERR)
         {
@@ -354,20 +359,23 @@ void draw_vumeter_border(WINDOW *local_win, int height, int width, int starty, i
     wrefresh(local_win);
 }
 
-void draw_vumeter_data(WINDOW* local_win, int data, int height, int width, int starty, int startx)
+void draw_vumeter_data(WINDOW* local_win, int channel_dbs, int height, int width, int starty, int startx)
 {
+    // Smooth out values for the left channel so it doesn't jump around too much
+    int target_height = db_to_vu_height(channel_dbs, height);
+
     startx++;
     starty++;
     for (int i = 0; i < height - 2; i++)
     {
-        // Let's say data is 10, which means that we need to draw 10 lines and height is 20
+        // Let's say target_height is 10, which means that we need to draw 10 lines and height is 20
         // We start from the top of the vumeter, and we have to draw the bottom 10 lines with color
-        // if i = 0, height - i = 20, 20 > 10 (data), no color
-        // if i = 10, height - i = 10, 10 = 10 (data), color
-        // if i = 11, height - i = 9, 9 < 10 (data), color
-        // therefore, as long as height - i < data, we need to apply color
+        // if i = 0, height - i = 20, 20 > 10 (target_height), no color
+        // if i = 10, height - i = 10, 10 = 10 (target_height), color
+        // if i = 11, height - i = 9, 9 < 10 (target_height), color
+        // therefore, as long as height - i < target_height, we need to apply color
         // Apply color according to db
-        if (height - i < data)
+        if (height - i < target_height)
         {
             if (height - i < green_threshold_height)
             {
