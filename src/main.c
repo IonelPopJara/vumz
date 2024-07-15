@@ -29,32 +29,45 @@
 #define DEBUG_WIN_HEIGHT 7;
 #define DEBUG_WIN_WIDTH 19;
 
-/* VU Meter */
+/* Structs */
 /* In order to properly process the data from the stream
  * and display it on the VU Meter, I have defined this struct
  * which will hold the stream, the loop, and the audio format,
- * and the necessary parameters of the VU Meter.
+ * and the necessary audio parameters for the VU Meter.
  * information.
 */
-struct data {
+struct pipewire_data {
     // Pipewire
     struct pw_main_loop *loop;
     struct pw_stream *stream;
     struct spa_audio_info format;
     // VU Meter
-    int channels;
+    int n_channels;
     float left_channel_dbs;
     float right_channel_dbs;
 };
-/* VU Meter */
+
+struct vu_meter {
+    int border_height;
+    int left_vumeter_height;
+    int right_vumeter_height;
+    int green_threshold_height;
+    int yellow_threshold_height;
+};
+
+struct ncurses_window {
+    WINDOW* win;
+    int height;
+    int width;
+    int starty;
+    int startx;
+};
+/* Structs */
 
 int vumeter_border_height = 0;
 
 int current_left_volume_height = 0;
 int current_right_volume_height = 0;
-
-float left_channel_dbs = 0.0f;
-float right_channel_dbs = 0.0f;
 
 int green_threshold_height = 0;
 int yellow_threshold_height = 0;
@@ -73,7 +86,7 @@ WINDOW *create_newwin(int height, int width, int starty, int startx);
 
 void destroy_win(WINDOW *local_win);
 
-void draw_debug_info(WINDOW *local_win, int channels, float left, float right);
+void draw_debug_info(WINDOW *local_win, void* vumeter_data);
 
 void draw_vumeter_border(WINDOW* local_win, int height, int width, int starty, int startx);
 
@@ -83,7 +96,7 @@ void cleanup_ncurses();
 /* NCURSES */
 
 /* PIPEWIRE */
-static void on_process(void *userdata);
+static void on_process(void *vumeter_data);
 
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param);
 
@@ -117,7 +130,7 @@ int main(int argc, char **argv)
     setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
 
     /* Pipewire config */
-    struct data data = { 0, };
+    struct pipewire_data data = { 0, };
     const struct spa_pod *params[1];
     uint8_t buffer[1024];
     struct pw_properties *props;
@@ -165,61 +178,62 @@ int main(int argc, char **argv)
     init_ncurses();
     /* Ncurses config */
 
-    // Window that will display the VU Meter
-    WINDOW *win_vumeter;     int height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter;
+    /* Ncurses windows */
+    struct ncurses_window win_vumeter = {0};    // Window to render the vumeter
+    struct ncurses_window win_debug = {0};      // Window to render the debug information
 
-    // Window that will display debug information when the verbose flag is enabled
-    WINDOW *win_debug;
-    int height_win_debug, width_win_debug, starty_win_debug, startx_win_debug;
-
-    // Define height, width, and starting position for the vumeter window
-    height_win_vumeter = LINES;
-    width_win_vumeter = COLS;
-    starty_win_vumeter = 0;
-    startx_win_vumeter = 0;
+    // Initialize vumeter window
+    win_vumeter.height = LINES;
+    win_vumeter.width = COLS;
+    win_vumeter.starty = 0;
+    win_vumeter.startx = 0;
 
     refresh(); // Refresh the screen
 
     // NOTE: The rendering order matters
     // Create the vumeters window
-    win_vumeter = create_newwin(height_win_vumeter, width_win_vumeter, starty_win_vumeter, startx_win_vumeter);
+    win_vumeter.win = create_newwin(win_vumeter.height, win_vumeter.width, win_vumeter.starty, win_vumeter.startx);
 
     if (debug_mode)
     {
         // Define height, width, and starting position for the debug window
-        height_win_debug = DEBUG_WIN_HEIGHT;
-        width_win_debug = DEBUG_WIN_WIDTH;
-        starty_win_debug = 0;
-        startx_win_debug = 0;
+        win_debug.height = DEBUG_WIN_HEIGHT;
+        win_debug.width = DEBUG_WIN_WIDTH;
+        win_debug.starty = 0;
+        win_debug.startx = 0;
         // Create the debug window
-        win_debug = create_newwin(height_win_debug, width_win_debug, starty_win_debug, startx_win_debug);
+        win_debug.win = create_newwin(win_debug.height, win_debug.width, win_debug.starty, win_debug.startx);
     }
 
+    /* Vumeter Initialization */
+    struct vu_meter vumeter = {0};
+    /* Vumeter Initialization */
+
     // Calculate vumeters coordinates
-    vumeter_border_height = height_win_vumeter;
+    vumeter_border_height = win_vumeter.height;
     int vumeter_border_width = 2;
 
     int vumeter_border_starty = 0;
-    int left_vumeter_border_startx = (width_win_vumeter / 2) - vumeter_border_width - 3;
-    int right_vumeter_border_startx = (width_win_vumeter / 2) + vumeter_border_width - 1;
+    int left_vumeter_border_startx = (win_vumeter.width / 2) - vumeter_border_width - 3;
+    int right_vumeter_border_startx = (win_vumeter.width / 2) + vumeter_border_width - 1;
 
     // Calculate the thresholds for the VU Meter
     green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, vumeter_border_height);
     yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, vumeter_border_height);
 
     // window, height, width, starting x, starting y
-    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
-    draw_vumeter_border(win_vumeter, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+    draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
+    draw_vumeter_border(win_vumeter.win, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
 
     while (true)
     {
         pw_loop_iterate(pw_main_loop_get_loop(data.loop), 0);
 
         if (debug_mode)
-            draw_debug_info(win_debug, 2, left_channel_dbs, right_channel_dbs);
+            draw_debug_info(win_debug.win, &data);
 
-        draw_vumeter_data(win_vumeter, current_left_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
-        draw_vumeter_data(win_vumeter, current_right_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
+        draw_vumeter_data(win_vumeter.win, current_left_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, left_vumeter_border_startx);
+        draw_vumeter_data(win_vumeter.win, current_right_volume_height, vumeter_border_height, vumeter_border_width, vumeter_border_starty, right_vumeter_border_startx);
 
         if (screensaver_mode && getch() != ERR)
         {
@@ -228,8 +242,8 @@ int main(int argc, char **argv)
     }
 
     // Destroy windows
-    destroy_win(win_debug);
-    destroy_win(win_vumeter);
+    destroy_win(win_debug.win);
+    destroy_win(win_vumeter.win);
     endwin();
 
     // Stop pipewire stream
@@ -296,16 +310,17 @@ void destroy_win(WINDOW* local_win)
     delwin(local_win);
 }
 
-void draw_debug_info(WINDOW *local_win, int channels, float left, float right)
+void draw_debug_info(WINDOW *local_win, void *vumeter_data)
 {
+    struct pipewire_data *data = (struct pipewire_data *)vumeter_data;
     wattron(local_win, COLOR_PAIR(4));
     mvwprintw(local_win, 1, 2, "VUMZ");
     mvwprintw(local_win, 2, 2, "---------------");
     wattroff(local_win, COLOR_PAIR(4));
     wattron(local_win, COLOR_PAIR(5));
-    mvwprintw(local_win, 3, 2, "Channels: %d", channels);
-    mvwprintw(local_win, 4, 2, "|- L: %.2f dB", left);
-    mvwprintw(local_win, 5, 2, "|- R: %.2f dB", right);
+    mvwprintw(local_win, 3, 2, "Channels: %d", data->n_channels);
+    mvwprintw(local_win, 4, 2, "|- L: %.2f dB", data->left_channel_dbs);
+    mvwprintw(local_win, 5, 2, "|- R: %.2f dB", data->right_channel_dbs);
     wattroff(local_win, COLOR_PAIR(5));
     wrefresh(local_win);
 }
@@ -411,9 +426,9 @@ int lerp(int start, int end, float percent)
     return start + percent + (end - start);
 }
 
-static void on_process(void *userdata)
+static void on_process(void *vumeter_data)
 {
-    struct data *data = userdata;
+    struct pipewire_data *data = vumeter_data;
     struct pw_buffer *b;
     struct spa_buffer *buf;
     float *samples, max;
@@ -434,6 +449,8 @@ static void on_process(void *userdata)
     n_channels = data->format.info.raw.channels;
     n_samples = buf->datas[0].chunk->size / sizeof(float);
 
+    data->n_channels = n_channels;
+
     /* NOTE:
      * I don't think lerp is a good choice for smoothing the movement
      * but it'll have to do for now
@@ -449,7 +466,8 @@ static void on_process(void *userdata)
         if (c == 0)
         {
             // Store the decibels for debugging purposes
-            left_channel_dbs = amplitude_to_db(max);
+            float left_channel_dbs = amplitude_to_db(max);
+            data->left_channel_dbs = left_channel_dbs;
 
             // Smooth out values for the left channel so it doesn't jump around too much
             int target_left_volume_height = db_to_vu_height(left_channel_dbs, vumeter_border_height);
@@ -458,7 +476,8 @@ static void on_process(void *userdata)
         else if (c == 1)
         {
             // Store the decibels for debugging purposes
-            right_channel_dbs = amplitude_to_db(max);
+            float right_channel_dbs = amplitude_to_db(max);
+            data->right_channel_dbs = right_channel_dbs;
 
             // Smooth out values for the right channel so it doesn't jump around too much
             int target_right_volume_height = db_to_vu_height(right_channel_dbs, vumeter_border_height);
@@ -476,7 +495,7 @@ static void on_process(void *userdata)
  */
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param)
 {
-    struct data *data = _data;
+    struct pipewire_data *data = _data;
 
     /* NULL means to clear the format */
     if (param == NULL || id != SPA_PARAM_Format)
@@ -505,7 +524,7 @@ static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_p
 
 static void do_quit(void *userdata, int signal_number)
 {
-    struct data* data = userdata;
+    struct pipewire_data* data = userdata;
     pw_main_loop_quit(data->loop);
     cleanup_ncurses();
 
