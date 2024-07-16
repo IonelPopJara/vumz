@@ -78,8 +78,9 @@ man vumz
 
 ## Acknowledgements
 
-Some of the code for ncurses was modified from [NCURSES Programming HOWTO](https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/index.html) and other parts inspired by [cbonsai](https://gitlab.com/jallbrit/cbonsai).
-Some of the PipeWire code was taken directly from the [audio-capture exmaple](https://docs.pipewire.org/audio-capture_8c-example.html#a9) in their documentation.
+Some of the code for ncurses was modified from [NCURSES Programming HOWTO](https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/index.html) and other parts were inspired by [cbonsai](https://gitlab.com/jallbrit/cbonsai).
+
+Some of the PipeWire code was taken directly from the [audio-capture example](https://docs.pipewire.org/audio-capture_8c-example.html#a9) in their documentation.
 
 ## Inspiration
 
