@@ -1,14 +1,8 @@
 # VUMZ (VU Meter visualiZer)
 
+| <code>vumz</code> is a simple command-line VU meter visualizer for unix systems. It uses <code>ncurses</code> and <code>PipeWire</code> to display the audio levels of the left and right audio channels. | ![vumz](doc/vumz.gif "vumz") |
+|---|---|
 
-<div style="display: flex; align-items: center; width: 100%;">
-    <div style="flex: 3; padding: 10px;">
-        <p><code>vumz</code> is a simple command-line VU meter visualizer for unix systems. It uses <code>ncurses</code> and <code>PipeWire</code> to display the audio levels of the left and right audio channels.</p>
-    </div>
-    <div style="flex: 1; padding: 10px;">
-        <img src="doc/vumz.gif" alt="vumz" style="max-width: 100%; height: 200px;">
-    </div>
-</div>
 
 ## Features
 - Real-time audio level visualization
@@ -90,3 +84,10 @@ Some of the PipeWire code was taken directly from the [audio-capture exmaple](ht
 ## Inspiration
 
 After playing around with [cava](https://github.com/karlstav/cava) and [cbonsai](https://gitlab.com/jallbrit/cbonsai), I thought it would be fun to make a simple program to capture audio from my computer and graph it in real-time.
+
+## TODO Ideas
+
+- [ ] Smooth out the VU meter animation
+- [ ] Add more color options
+- [ ] Add sensitivity option
+
