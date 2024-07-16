@@ -1,0 +1,56 @@
+.TH vumz 1 "July 2024" "vumz 0.1" "User Commands"
+.SH NAME
+vumz \- \fBVU\fR \fBM\fReter Visuali\fBZ\fRer
+.SH SYNOPSIS
+.B vumz
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B vumz
+is a simple command-line VU meter visualizer that uses ncurses and PipeWire to display the audio levels of the left and right audio channels.
+
+.SH OPTIONS
+.TP
+.B \-D, \-\-debug
+Enable debug mode, which prints useful data for developers.
+.TP
+.B \-S, \-\-screensaver
+Enable screensaver mode, allowing you to press any key to quit.
+.TP
+.B \-h, \-\-help
+Display a help message and exit.
+
+.SH INTERACTIVE COMMANDS
+The smooth factor controls how smoothly the VU meter responds to changes in audio levels.
+.TP
+.B KEY_UP
+Increase the smooth factor.
+.TP
+.B KEY_DOWN
+Decrease the smooth factor.
+
+.SH EXAMPLES
+.TP
+.B vumz
+.br
+Start the VU meter visualizer.
+.BR
+.TP
+.B vumz \-D
+.br
+Start the VU meter visualizer in debug mode.
+.BR
+.TP
+.B vumz \-S
+.br
+Start the VU meter visualizer in screensaver mode.
+.BR
+
+.SH BUGS
+When it first runs, all the squares are colored up.
+
+.SH AUTHOR
+Ionel Pop <ionelalexandru.pop@gmail.com>
+
+.SH SEE ALSO
+.BR pipewire (1),
+.BR ncurses (3)
