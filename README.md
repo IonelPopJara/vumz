@@ -1,6 +1,14 @@
 # VUMZ (VU Meter visualiZer)
 
-`vumz` is a simple command-line VU meter visualizer for unix systems. It uses `ncurses` and `PipeWire` to display the audio levels of the left and right audio channels.
+
+<div style="display: flex; align-items: center; width: 100%;">
+    <div style="flex: 3; padding: 10px;">
+        <p><code>vumz</code> is a simple command-line VU meter visualizer for unix systems. It uses <code>ncurses</code> and <code>PipeWire</code> to display the audio levels of the left and right audio channels.</p>
+    </div>
+    <div style="flex: 1; padding: 10px;">
+        <img src="doc/vumz.gif" alt="vumz" style="max-width: 100%; height: 200px;">
+    </div>
+</div>
 
 ## Features
 - Real-time audio level visualization
