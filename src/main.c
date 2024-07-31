@@ -16,8 +16,8 @@
 #define DEBUG_MIN_HEIGHT 7
 #define DEBUG_MIN_WIDTH 25
 
-#define VUMETER_GREEN_THRESHOLD_DB -30.0f
-#define VUMETER_YELLOW_THRESHOLD_DB -15.0f
+#define VUMETER_GREEN_THRESHOLD_DB -20.0f
+#define VUMETER_YELLOW_THRESHOLD_DB -6.0f
 
 #define DEBUG_WIN_HEIGHT 8;
 #define DEBUG_WIN_WIDTH 19;
@@ -309,7 +309,7 @@ static float amplitude_to_db(float amplitude)
 
 static int smooth(int previous, int current, float factor)
 {
-    return (int)(previous * (1.0f - factor) + current * factor);
+    return (int)(current * factor + previous * (1.0f - factor));
 }
 /* UTIL */
 
