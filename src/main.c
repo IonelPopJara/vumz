@@ -309,7 +309,7 @@ static float amplitude_to_db(float amplitude)
 
 static int smooth(int previous, int current, float factor)
 {
-    return (int)(previous * (1.0f - factor) + current * factor);
+    return (int)(current * factor + previous * (1.0f - factor));
 }
 /* UTIL */
 
