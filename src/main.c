@@ -324,12 +324,16 @@ void init_ncurses()
     cbreak();               /* Don't wait for new lines to read input */
     start_color();          /* Start color */
     nodelay(stdscr, TRUE);  /* Set getch() to be non-blocking */
-
-    init_pair(1, COLOR_GREEN, COLOR_BLACK); // First color pair, this will be used for the lower volume levels
-    init_pair(2, COLOR_YELLOW, COLOR_BLACK); // Second color pair, this will be used for the medium volume levels
-    init_pair(3, COLOR_RED, COLOR_BLACK); // Third color pair, this will be used for the higher volume levels
-    init_pair(4, COLOR_MAGENTA, COLOR_BLACK); // Fourth color pair, this will be used for the debug window
-    init_pair(5, COLOR_BLUE, COLOR_BLACK); // Fifth color pair, this will be used for the debug window
+    
+    if (has_colors())
+    {
+        use_default_colors(); // Allow using the default terminal colors
+        init_pair(1, COLOR_GREEN, -1); // First color pair, this will be used for the lower volume levels
+        init_pair(2, COLOR_YELLOW, -1); // Second color pair, this will be used for the medium volume levels
+        init_pair(3, COLOR_RED, -1); // Third color pair, this will be used for the higher volume levels
+        init_pair(4, COLOR_MAGENTA, -1); // Fourth color pair, this will be used for the debug window
+        init_pair(5, COLOR_BLUE, -1); // Fifth color pair, this will be used for the debug window
+    }
 }
 
 WINDOW *create_newwin(int height, int width, int starty, int startx)
