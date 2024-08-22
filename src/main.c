@@ -7,11 +7,9 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <locale.h>
-
-#include <spa/param/audio/format-utils.h>
-#include <pipewire/pipewire.h>
+#include <pthread.h>
+#include "audio-cap.h"
 
 #define DEBUG_MIN_HEIGHT 7
 #define DEBUG_MIN_WIDTH 25
@@ -23,24 +21,6 @@
 #define DEBUG_WIN_WIDTH 19;
 
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
-
-/* STRUCTS */
-/* In order to properly process the data from the stream
- * and display it on the VU Meter, I have defined this struct
- * which will hold the stream, the loop, and the audio format,
- * and the necessary audio parameters for the VU Meter.
- * information.
-*/
-struct pipewire_data {
-    // Pipewire
-    struct pw_main_loop *loop;
-    struct pw_stream *stream;
-    struct spa_audio_info format;
-    // VU Meter
-    int n_channels;
-    float left_channel_dbs;
-    float right_channel_dbs;
-};
 
 struct vumeter {
     int height;
@@ -57,7 +37,6 @@ struct ncurses_window {
     int starty;
     int startx;
 };
-/* STRUCTS */
 
 /* VARIABLES */
 int green_threshold_height = 0;
@@ -69,7 +48,6 @@ void print_help();
 
 /* UTIL */
 static int db_to_vu_height(float db, int vu_height);
-static float amplitude_to_db(float amplitude);
 // The smooth fuction uses Exponential Moving Average (EMA) for now
 static int smooth(int previous, int current, float factor);
 /* UTIL */
@@ -78,27 +56,23 @@ static int smooth(int previous, int current, float factor);
 void init_ncurses();
 WINDOW *create_newwin(int height, int width, int starty, int startx);
 void destroy_win(WINDOW *local_win);
-void draw_debug_info(WINDOW *local_win, void* vumeter_data);
+/*void draw_debug_info(WINDOW *local_win, void* vumeter_data);*/
 void draw_vumeter_border(WINDOW* local_win, void* vumeter);
 void draw_vumeter_data(WINDOW* local_win, int channel_dbs, void *vumeter);
 void cleanup_ncurses();
 /* NCURSES */
 
-/* PIPEWIRE */
-static void on_process(void *vumeter_data);
-static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param);
-
-static const struct pw_stream_events stream_events = {
-    PW_VERSION_STREAM_EVENTS,
-    .param_changed = on_stream_param_changed,
-    .process = on_process,
-};
-
-static void do_quit(void *userdata, int signal_number);
-/* PIPEWIRE */
-
 int main(int argc, char **argv)
 {
+    pthread_t audio_thread;
+    struct audio_data audio = {};
+
+    // Create a thread to run the input function
+    if (pthread_create(&audio_thread, NULL, input_pipewire, (void*)&audio) != 0) {
+        fprintf(stderr, "Error");
+        return EXIT_FAILURE;
+    }
+
     bool debug_mode = false;
     bool screensaver_mode = false;
 
@@ -126,51 +100,6 @@ int main(int argc, char **argv)
     }
 
     setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
-
-    /* Pipewire config */
-    struct pipewire_data data = { 0, };
-    const struct spa_pod *params[1];
-    uint8_t buffer[1024];
-    struct pw_properties *props;
-    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
-
-    pw_init(&argc, &argv);
-
-    // Make a main loop
-    data.loop = pw_main_loop_new(NULL /* properties */);
-
-    pw_loop_add_signal(pw_main_loop_get_loop(data.loop), SIGINT, do_quit, &data);
-    pw_loop_add_signal(pw_main_loop_get_loop(data.loop), SIGTERM, do_quit, &data);
-
-    // Create a simple stream
-    props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio",
-                              PW_KEY_CONFIG_NAME, "client-rt.conf",
-                              PW_KEY_MEDIA_CATEGORY, "Capture",
-                              PW_KEY_MEDIA_ROLE, "Music",
-                              NULL);
-
-    pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");  // Enable capture from the sink monitor ports
-
-    data.stream = pw_stream_new_simple(
-        pw_main_loop_get_loop(data.loop),
-        "audio-capture",
-        props,
-        &stream_events,
-        &data);
-
-    params[0] = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat,
-                    &SPA_AUDIO_INFO_RAW_INIT(
-                    .format = SPA_AUDIO_FORMAT_F32));
-
-    // Connec this stream
-    pw_stream_connect(data.stream,
-                      PW_DIRECTION_INPUT,
-                      PW_ID_ANY,
-                      PW_STREAM_FLAG_AUTOCONNECT |
-                      PW_STREAM_FLAG_MAP_BUFFERS |
-                      PW_STREAM_FLAG_RT_PROCESS,
-                      params, 1);
-    /* Pipewire config */
 
     /* Ncurses config */
     init_ncurses();
@@ -225,13 +154,11 @@ int main(int argc, char **argv)
 
     while (true)
     {
-        pw_loop_iterate(pw_main_loop_get_loop(data.loop), 0);
+        /*if (debug_mode)*/
+            /*draw_debug_info(win_debug.win, &audio);*/
 
-        if (debug_mode)
-            draw_debug_info(win_debug.win, &data);
-
-        draw_vumeter_data(win_vumeter.win, data.left_channel_dbs, &left_vumeter);
-        draw_vumeter_data(win_vumeter.win, data.right_channel_dbs, &right_vumeter);
+        draw_vumeter_data(win_vumeter.win, audio.left_channel_dbs, &left_vumeter);
+        draw_vumeter_data(win_vumeter.win, audio.right_channel_dbs, &right_vumeter);
 
         if (screensaver_mode && getch() != ERR)
         {
@@ -257,11 +184,6 @@ int main(int argc, char **argv)
     destroy_win(win_debug.win);
     destroy_win(win_vumeter.win);
     endwin();
-
-    // Stop pipewire stream
-    pw_stream_destroy(data.stream);
-    pw_main_loop_destroy(data.loop);
-    pw_deinit();
 
     exit(EXIT_SUCCESS);
 }
@@ -295,16 +217,6 @@ static int db_to_vu_height(float db, int vu_height)
     }
 
     return (int)(((db + 60.0f) / 60.0f) * vu_height);
-}
-
-static float amplitude_to_db(float amplitude)
-{
-    if (amplitude <= 0.0f)
-    {
-        return -60.0f;
-    }
-
-    return 20.0f * log10f(amplitude);
 }
 
 static int smooth(int previous, int current, float factor)
@@ -355,21 +267,21 @@ void destroy_win(WINDOW* local_win)
     delwin(local_win);
 }
 
-void draw_debug_info(WINDOW *local_win, void *vumeter_data)
-{
-    struct pipewire_data *data = (struct pipewire_data *)vumeter_data;
-    wattron(local_win, COLOR_PAIR(4));
-    mvwprintw(local_win, 1, 2, "VUMZ");
-    mvwprintw(local_win, 2, 2, "---------------");
-    wattroff(local_win, COLOR_PAIR(4));
-    wattron(local_win, COLOR_PAIR(5));
-    mvwprintw(local_win, 3, 2, "Channels: %d", data->n_channels);
-    mvwprintw(local_win, 4, 2, "|- L: %.2f dB", data->left_channel_dbs);
-    mvwprintw(local_win, 5, 2, "|- R: %.2f dB", data->right_channel_dbs);
-    mvwprintw(local_win, 6, 2, "smooth: %.2f", smooth_factor);
-    wattroff(local_win, COLOR_PAIR(5));
-    wrefresh(local_win);
-}
+/*void draw_debug_info(WINDOW *local_win, void *vumeter_data)*/
+/*{*/
+/*    struct pipewire_data *data = (struct pipewire_data *)vumeter_data;*/
+/*    wattron(local_win, COLOR_PAIR(4));*/
+/*    mvwprintw(local_win, 1, 2, "VUMZ");*/
+/*    mvwprintw(local_win, 2, 2, "---------------");*/
+/*    wattroff(local_win, COLOR_PAIR(4));*/
+/*    wattron(local_win, COLOR_PAIR(5));*/
+/*    mvwprintw(local_win, 3, 2, "Channels: %d", data->n_channels);*/
+/*    mvwprintw(local_win, 4, 2, "|- L: %.2f dB", data->left_channel_dbs);*/
+/*    mvwprintw(local_win, 5, 2, "|- R: %.2f dB", data->right_channel_dbs);*/
+/*    mvwprintw(local_win, 6, 2, "smooth: %.2f", smooth_factor);*/
+/*    wattroff(local_win, COLOR_PAIR(5));*/
+/*    wrefresh(local_win);*/
+/*}*/
 
 void draw_vumeter_border(WINDOW *local_win, void* vumeter)
 {
@@ -470,94 +382,3 @@ void cleanup_ncurses()
 }
 /* NCURSES */
 
-/* PIPEWIRE */
-static void on_process(void *vumeter_data)
-{
-    struct pipewire_data *data = vumeter_data;
-    struct pw_buffer *b;
-    struct spa_buffer *buf;
-    float *samples, max;
-    uint32_t c, n, n_channels, n_samples;
-
-    if ((b = pw_stream_dequeue_buffer(data->stream)) == NULL)
-    {
-        pw_log_warn("out of bufers: %m");
-        return;
-    }
-
-    buf = b->buffer;
-    if ((samples = buf->datas[0].data) == NULL)
-    {
-        return;
-    }
-
-    n_channels = data->format.info.raw.channels;
-    n_samples = buf->datas[0].chunk->size / sizeof(float);
-
-    data->n_channels = n_channels;
-
-    for (c = 0; c < data->format.info.raw.channels; c++)
-    {
-        max = 0.0f;
-        for (n = c; n < n_samples; n += n_channels)
-        {
-            max = fmaxf(max, fabsf(samples[n]));
-        }
-
-        if (c == 0)
-        {
-            // Store the decibels for debugging purposes
-            float left_channel_dbs = amplitude_to_db(max);
-            data->left_channel_dbs = left_channel_dbs;
-        }
-        else if (c == 1)
-        {
-            // Store the decibels for debugging purposes
-            float right_channel_dbs = amplitude_to_db(max);
-            data->right_channel_dbs = right_channel_dbs;
-        }
-    }
-
-    fflush(stdout);
-    pw_stream_queue_buffer(data->stream, b);
-}
-
-static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param)
-{
-    struct pipewire_data *data = _data;
-
-    /* NULL means to clear the format */
-    if (param == NULL || id != SPA_PARAM_Format)
-    {
-        return;
-    }
-
-    if (spa_format_parse(param, &data->format.media_type, &data->format.media_subtype) < 0)
-    {
-        return;
-    }
-
-    /* only accept raw audio */
-    if (data->format.media_type != SPA_MEDIA_TYPE_audio ||
-        data->format.media_subtype != SPA_MEDIA_SUBTYPE_raw)
-    {
-        return;
-    }
-
-    /* call a helper function to parse the format for us */
-    spa_format_audio_raw_parse(param, &data->format.info.raw);
-}
-
-static void do_quit(void *userdata, int signal_number)
-{
-    struct pipewire_data* data = userdata;
-    pw_main_loop_quit(data->loop);
-    cleanup_ncurses();
-
-    pw_stream_destroy(data->stream);
-    pw_main_loop_destroy(data->loop);
-    pw_deinit();
-
-    exit(EXIT_SUCCESS);
-}
-/* PIPEWIRE */

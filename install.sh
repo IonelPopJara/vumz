@@ -13,7 +13,7 @@ MAN_PAGE="doc/vumz.1"
 mkdir -p "$BUILD_DIR"
 
 # Compile the source code
-gcc -Wall "$SRC_DIR/main.c" -o "$BUILD_DIR/$EXECUTABLE" -lm -I/usr/include/pipewire-0.3 -I/usr/include/spa-0.2 -D_REENTRANT -lpipewire-0.3 -lncursesw
+gcc -Wall "$SRC_DIR/main.c" "$SRC_DIR/audio-cap.c" -o "$BUILD_DIR/$EXECUTABLE" -lm -I/usr/include/pipewire-0.3 -I/usr/include/spa-0.2 -D_REENTRANT -lpipewire-0.3 -lncursesw
 
 # Ensure the build was successful
 if [[ ! -f "$BUILD_DIR/$EXECUTABLE" ]]; then
