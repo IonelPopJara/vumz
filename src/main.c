@@ -1,5 +1,9 @@
 /*
  * VUMZ (VU Meter visualiZer)
+ * TODO:
+ *  - [ ] Add a starting line that never dissapears
+ *  - [ ] Add a buffer to store previous frames
+ *  - [ ] Add gravity simulation?
  */
 
 #include <stdio.h>
@@ -9,6 +13,7 @@
 #include <locale.h>
 #include <pthread.h>
 #include <string.h>
+#include <time.h>
 #include "audio-cap.h"
 #include "audio-out.h"
 
@@ -17,6 +22,7 @@
 float smooth_factor = 1.0f;
 
 void print_help();
+long long current_time_in_ns();
 
 int main(int argc, char **argv)
 {
@@ -59,9 +65,13 @@ int main(int argc, char **argv)
     setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
     init_ncurses();
 
+    const long long target_frame_time_ns = 16666666LL; // 16.67 milliseconds in nanoseconds (1/60 in ms)
+
     // Main loop
     while (true)
     {
+        long long start_time_ns = current_time_in_ns();
+
         if (screensaver_mode && getch() != ERR)
         {
             break;
@@ -82,7 +92,12 @@ int main(int argc, char **argv)
         }
 
         draw_vumeter_data(audio.left_channel_dbs, audio.right_channel_dbs);
-        usleep(1000);
+
+        long long frame_duration_ns = current_time_in_ns() - start_time_ns;
+
+        if (frame_duration_ns < target_frame_time_ns) {
+            usleep((target_frame_time_ns - frame_duration_ns) / 1000); // sleep for the remaining time in us
+        }
     }
 
     if (pthread_join(audio_thread, NULL) != 0) {
@@ -109,5 +124,11 @@ void print_help()
         "   -S, --screensaver   screensaver mode: press any key to quit\n"
         "\n"
     );
+}
+
+long long current_time_in_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
