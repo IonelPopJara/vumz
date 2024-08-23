@@ -3,6 +3,7 @@
  */
 
 #include <ncurses.h>
+
 #include <stdbool.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <locale.h>
 #include <pthread.h>
 #include "audio-cap.h"
+#include "audio-out.h"
 
 #define DEBUG_MIN_HEIGHT 7
 #define DEBUG_MIN_WIDTH 25
@@ -152,6 +154,7 @@ int main(int argc, char **argv)
     draw_vumeter_border(win_vumeter.win, &right_vumeter);       // Draw the right vumeter border
     /* Ncurses config */
 
+    // Main loop
     while (true)
     {
         /*if (debug_mode)*/
@@ -236,7 +239,7 @@ void init_ncurses()
     cbreak();               /* Don't wait for new lines to read input */
     start_color();          /* Start color */
     nodelay(stdscr, TRUE);  /* Set getch() to be non-blocking */
-    
+
     if (has_colors())
     {
         use_default_colors(); // Allow using the default terminal colors
