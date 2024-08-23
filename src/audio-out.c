@@ -91,13 +91,7 @@ void init_ncurses()
         init_pair(5, COLOR_BLUE, -1); // Fifth color pair, this will be used for the debug window
     }
 
-    int height, width;
-    getmaxyx(stdscr, height, width);
-
-    mvprintw(0, 0, "Height: %d | Width %d\n", height, width);
-
     refresh(); // Refresh the screen
-    // TODO: call getmaxyx
 }
 
 void draw_vumeter_data(float left_channel_dbs, float right_channel_dbs)
@@ -105,20 +99,21 @@ void draw_vumeter_data(float left_channel_dbs, float right_channel_dbs)
     int terminal_height, terminal_width;
     getmaxyx(stdscr, terminal_height, terminal_width);
 
-    int vu_bar_width = 4;
-
-    int startx = terminal_width / 2;
-
-    double current_height = db_to_vu_height(left_channel_dbs, terminal_height);
     int green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, terminal_height);
     int yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, terminal_height);
 
-    mvprintw(2, 0, "%.2f DBs", left_channel_dbs);
-    mvprintw(3, 0, "Current Height: %f", current_height);
-    mvprintw(4, 0, "Int height: %d", (int)current_height);
-    mvprintw(terminal_height - 1, 0, "Terminal height: %d", terminal_height);
-    double percentage = get_fill_percentage(current_height);
-    mvprintw(5, 0, "Percentage:%.2f ", percentage);
+    // Starting positions and other shenanigans
+    int vu_bar_width = 4;
+    int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 7;
+    int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 7;
+
+    // Left channel data
+    double current_left_height = db_to_vu_height(left_channel_dbs, terminal_height);
+    double left_percentage = get_fill_percentage(current_left_height);
+
+    // Right channel data
+    double current_right_height = db_to_vu_height(right_channel_dbs, terminal_height);
+    double right_percentage = get_fill_percentage(current_right_height);
 
     // Main render
     for (int i = 0; i < terminal_height; i++)
@@ -137,31 +132,58 @@ void draw_vumeter_data(float left_channel_dbs, float right_channel_dbs)
             attron(COLOR_PAIR(3));
         }
 
-        if (terminal_height - i <= current_height) {
-
+        // Render left channel
+        if (terminal_height - i <= current_left_height) {
             // Draw a colored block;
             for (int j = 0; j < vu_bar_width; j++)
             {
                 // check how tall the block should be
-                mvprintw(0 + i, startx + j, "█");
+                mvprintw(0 + i, startx_left + j, "█");
             }
-
         }
-        else if (terminal_height - i > current_height && terminal_height - i < current_height + 1) {
+        else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {
             // If it is the top block
             // Check the percentage
-            int fill_index = get_fill_percentage_index(percentage);
+            int fill_index = get_fill_percentage_index(left_percentage);
 
             for (int j = 0; j < vu_bar_width; j++)
             {
-                mvprintw(0 + i, startx + j, "%s", fill_percentage[fill_index]);
+                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);
             }
         }
         else {
             // If it's none of the above
             for (int j = 0; j < vu_bar_width; j++)
             {
-                mvprintw(0 + i, startx + j, " ");
+                mvprintw(0 + i, startx_left + j, " ");
+            }
+        }
+
+        // Render right channel
+        if (terminal_height - i <= current_right_height) {
+            // Draw a colored block;
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                // check how tall the block should be
+                mvprintw(0 + i, startx_right + j, "█");
+            }
+
+        }
+        else if (terminal_height - i > current_right_height && terminal_height - i < current_right_height + 1) {
+            // If it is the top block
+            // Check the percentage
+            int fill_index = get_fill_percentage_index(right_percentage);
+
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                mvprintw(0 + i, startx_right + j, "%s", fill_percentage[fill_index]);
+            }
+        }
+        else {
+            // If it's none of the above
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                mvprintw(0 + i, startx_right + j, " ");
             }
         }
 
