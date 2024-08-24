@@ -121,50 +121,111 @@ void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_pr
     // -- Get the previous buffer data and split it into left and right channels --
     // Previous left channel data
     float prev_left_channel_dbs = audio_out_buffer_prev[0];
+    double previous_left_height = db_to_vu_height(prev_left_channel_dbs, terminal_height);
     // Previous right channel data
     float prev_right_channel_dbs = audio_out_buffer_prev[1];
+    double previous_right_height = db_to_vu_height(prev_right_channel_dbs, terminal_height);
 
     // Main render
     for (int i = 0; i < terminal_height; i++)
     {
         // Apply color according to db
         if (terminal_height - i < green_threshold_height) {
-            //green
-            attron(COLOR_PAIR(1));
+            attron(COLOR_PAIR(1)); // green
         }
         else if (terminal_height - i < yellow_threshold_height) {
-            // yellow
-            attron(COLOR_PAIR(2));
+            attron(COLOR_PAIR(2)); // yellow
         }
         else {
-            // red
-            attron(COLOR_PAIR(3));
+            attron(COLOR_PAIR(3)); // red
         }
 
         // Render left channel
-        if (terminal_height - i <= current_left_height) {
+        // If the height we're checking (term_h - i) is supposed to be part of the colored vumeter
+        // Compare against the previous frame to reduce the amount of redrawn pixels
+        // If the previous frame had a lower height, we need to color the pixels
+        /*if (terminal_height - i <= (int) current_left_height && terminal_height - i > (int) previous_left_height) {*/
+            /*
+             * c     p       i  t - i
+             * ----------------------
+             * -     -       0    8
+             * .5    -       1    7
+             * 6     -       2    6     ---
+             * -     -       3    5      |
+             * -     -       4    4      | area of interest
+             * -     -       5    3      |
+             * -     .5      6    2     ---
+             * -     1       7    1
+             * ---------------
+             * term_height = 8
+             */
             // Draw a colored block;
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                // check how tall the block should be
-                mvprintw(0 + i, startx_left + j, "█");
-            }
-        }
-        else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {
-            // If it is the top block
+        /*    for (int j = 0; j < vu_bar_width; j++)*/
+        /*    {*/
+        /*        // check how tall the block should be*/
+        /*        mvprintw(0 + i, startx_left + j, "█");*/
+        /*    }*/
+        /*}*/
+        // Check for the top block
+        /*else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {*/
+        /*else if ((float)(terminal_height - i) < (float)(current_left_height) + 1.0f && (float)(terminal_height - i) > (float)current_left_height) {*/
+            /*
+             * c     p(!)    i  t - i
+             * ----------------------
+             * -     -       0    8
+             * .5    -       1    7     --- area of interest
+             * 6     -       2    6
+             * -     -       3    5
+             * -     -       4    4
+             * -     -       5    3
+             * -     .5      6    2
+             * -     1       7    1
+             * ---------------
+             * term_height = 8
+             */
             // Check the percentage
-            int fill_index = get_fill_percentage_index(left_percentage);
+        /*    int fill_index = get_fill_percentage_index(left_percentage);*/
+        /**/
+        /*    for (int j = 0; j < vu_bar_width; j++)*/
+        /*    {*/
+        /*        mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);*/
+        /*    }*/
+        /*}*/
+        /*else if (terminal_height - i > current_left_height + 1 && terminal_height - i <= previous_left_height + 1) {*/
+            /*
+             * c     p       i  t - i
+             * ----------------------
+             * -     -       0    8
+             * -     -       1    7
+             * -     .5      2    6     --- area of interest
+             * -     5       3    5      |
+             * -     -       4    4     ---
+             * .5    -       5    3  - first condition stops here
+             * 2     -       6    2
+             * -     -       7    1
+             * ---------------
+             * term_height = 8
+             */
+            // Clear the pixels
+        /*    for (int j = 0; j < vu_bar_width; j++)*/
+        /*    {*/
+        /*        mvprintw(0 + i, startx_left + j, " ");*/
+        /*    }*/
+        /*}*/
 
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);
+        // Render left channel
+        if (terminal_height - i < current_left_height) {
+            for (int j = 0; j < vu_bar_width; j++) {
+                mvprintw(i, startx_left + j, "█");
             }
-        }
-        else {
-            // If it's none of the above
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_left + j, " ");
+        } else if (terminal_height - i < current_left_height + 1.0) {
+            int fill_index = get_fill_percentage_index(left_percentage);
+            for (int j = 0; j < vu_bar_width; j++) {
+                mvprintw(i, startx_left + j, "%s", fill_percentage[fill_index]);
+            }
+        } else if (terminal_height - i <= previous_left_height) {
+            for (int j = 0; j < vu_bar_width; j++) {
+                mvprintw(i, startx_left + j, " ");
             }
         }
 
