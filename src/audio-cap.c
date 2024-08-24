@@ -5,6 +5,8 @@
 #include "audio-cap.h"
 #include <math.h>
 
+static float gamma_amp = 2.0f;
+
 static float amplitude_to_db(float amplitude)
 {
     if (amplitude <= 0.0f)
@@ -36,30 +38,28 @@ static void on_process(void *userdata) {
 
     n_channels = data->format.info.raw.channels;
     n_samples = buf->datas[0].chunk->size / sizeof(float);
-    /*printf("Inside the thread\n");*/
 
     // Write to input buffer
-    // Cast the data
-    struct audio_data* audio = (struct audio_data*)(data->audio);
+    struct audio_data* audio = (struct audio_data*)(data->audio); // Cast the audio_data of pipewire_data
 
-    /*printf("Audio data:\n");*/
+    // Iterate over the samples
     for (c = 0; c < n_channels; c++) {
         max = 0.0f;
+        // Select the maximum data point from the sample for each channel
         for (n = c; n < n_samples; n += n_channels) {
             max = fmaxf(max, fabsf(samples[n]));
         }
 
+        // Amplify for fun
+        max = powf(max, gamma_amp);
+
         if (c == 0) {
             float left_channel_dbs = amplitude_to_db(max);
-            /*printf("\t%.6f -- L\n", left_channel_dbs);*/
-            /*data->left_channel_dbs = left_channel_dbs;*/
-            audio->left_channel_dbs = left_channel_dbs;
+            audio->audio_out_buffer[0] = left_channel_dbs;
         }
         else if (c == 1) {
             float right_channel_dbs = amplitude_to_db(max);
-            /*printf("\t%.6f -- R\n", right_channel_dbs);*/
-            /*data->right_channel_dbs = right_channel_dbs;*/
-            audio->right_channel_dbs = right_channel_dbs;
+            audio->audio_out_buffer[1] = right_channel_dbs;
         }
     }
 
