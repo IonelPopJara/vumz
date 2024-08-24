@@ -5,6 +5,8 @@
 #include "audio-cap.h"
 #include <math.h>
 
+static float gamma_amp = 2.0f;
+
 static float amplitude_to_db(float amplitude)
 {
     if (amplitude <= 0.0f)
@@ -47,6 +49,9 @@ static void on_process(void *userdata) {
         for (n = c; n < n_samples; n += n_channels) {
             max = fmaxf(max, fabsf(samples[n]));
         }
+
+        // Amplify for fun
+        max = powf(max, gamma_amp);
 
         if (c == 0) {
             float left_channel_dbs = amplitude_to_db(max);

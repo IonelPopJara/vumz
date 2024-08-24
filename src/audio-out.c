@@ -2,8 +2,8 @@
 #include <ncurses.h>
 #include <stdlib.h>
 
-#define VUMETER_GREEN_THRESHOLD_DB -20.0f
-#define VUMETER_YELLOW_THRESHOLD_DB -6.0f
+#define VUMETER_GREEN_THRESHOLD_DB -25.0f
+#define VUMETER_YELLOW_THRESHOLD_DB -10.0f
 
 // 100%, 87.5%, 75%, 62.5%, 50%, 37.5%, 25%, 12.5%, 0%
 static char* fill_percentage[8] = {"█", "▇", "▆", "▅", "▄", "▃", "▂", "▁"};
@@ -94,8 +94,8 @@ void init_ncurses()
     refresh(); // Refresh the screen
 }
 
-//FIX: Updat this with the new buffer
-void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_prev, int n_channels) {
+//TODO: Use the previous buffer to optimize rendering
+void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buffer_prev, int n_channels, double noise_reduction) {
 
     // -- Get terminal dimmensions and calculate color threshold levels --
     int terminal_height, terminal_width;
@@ -104,9 +104,9 @@ void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_pr
     int yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, terminal_height);
 
     // -- Calculate starting positions and other shenanigans --
-    int vu_bar_width = 4;
-    int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 7;
-    int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 7;
+    int vu_bar_width = terminal_width / 3;
+    int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 4;
+    int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 4;
 
     // -- Get the current buffer data and split it into left and right channels --
     // Current left channel data
@@ -214,18 +214,30 @@ void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_pr
         /*}*/
 
         // Render left channel
-        if (terminal_height - i < current_left_height) {
-            for (int j = 0; j < vu_bar_width; j++) {
-                mvprintw(i, startx_left + j, "█");
+        if (terminal_height - i <= current_left_height) {
+            // Draw a colored block;
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                // check how tall the block should be
+                mvprintw(0 + i, startx_left + j, "█");
             }
-        } else if (terminal_height - i < current_left_height + 1.0) {
+
+        }
+        else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {
+            // If it is the top block
+            // Check the percentage
             int fill_index = get_fill_percentage_index(left_percentage);
-            for (int j = 0; j < vu_bar_width; j++) {
-                mvprintw(i, startx_left + j, "%s", fill_percentage[fill_index]);
+
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);
             }
-        } else if (terminal_height - i <= previous_left_height) {
-            for (int j = 0; j < vu_bar_width; j++) {
-                mvprintw(i, startx_left + j, " ");
+        }
+        else {
+            // If it's none of the above
+            for (int j = 0; j < vu_bar_width; j++)
+            {
+                mvprintw(0 + i, startx_left + j, " ");
             }
         }
 
@@ -262,11 +274,8 @@ void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_pr
     }
 
     // Print to debug
-    mvprintw(terminal_height - 2, 0, "Current Left: %.2f | Previous Left: %.2f", audio_out_buffer[0], audio_out_buffer_prev[0]);
-    mvprintw(terminal_height - 3, 0, "Current Right: %.2f | Previous Right: %.2f", audio_out_buffer[1], audio_out_buffer_prev[1]);
-    // -- Copy the current buffer data to the previous buffer data --
-    audio_out_buffer_prev[0] = audio_out_buffer[0]; // Left
-    audio_out_buffer_prev[1] = audio_out_buffer[1]; // Right
+    /*mvprintw(terminal_height - 2, 0, "Gravity: %.5f", noise_reduction);*/
+    /*mvprintw(terminal_height - 3, 0, "Current Right: %.2f | Previous Right: %.2f", audio_out_buffer[1], audio_out_buffer_prev[1]);*/
     refresh();
 }
 

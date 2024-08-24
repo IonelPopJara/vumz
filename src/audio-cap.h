@@ -3,6 +3,7 @@
 
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
+#include <pthread.h>
 
 /*
  * Main pipewire struct that holds the loop, the stream, and the audio format.
@@ -26,6 +27,11 @@ struct audio_data {
     int n_channels;     // Number of channels (buffer size)
     float audio_out_buffer[2];   // Output buffer of size 2 (2 channels)
     float audio_out_buffer_prev[2];   // Previous output buffer
+    float peak[2];
+    float fall[2];
+    float mem[2];
+    double noise_reduction;
+    pthread_mutex_t lock;
 };
 
 void *input_pipewire(void *audiodata);
