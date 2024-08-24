@@ -3,7 +3,7 @@
  * TODO:
  *  - [ ] Add a starting line that never dissapears
  *  - [ ] Add a buffer to store previous frames
- *  - [ ] Add gravity simulation?
+ *  - [ ] Add gravity simulation? or some smoothing
  */
 
 #include <stdio.h>
