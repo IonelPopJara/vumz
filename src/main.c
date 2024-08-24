@@ -1,8 +1,8 @@
 /*
  * VUMZ (VU Meter visualiZer)
  * TODO:
+ *  - [x] Add a buffer to store previous frames
  *  - [ ] Add a starting line that never dissapears
- *  - [ ] Add a buffer to store previous frames
  *  - [ ] Add gravity simulation? or some smoothing
  */
 
@@ -23,6 +23,9 @@ float smooth_factor = 1.0f;
 
 void print_help();
 long long current_time_in_ns();
+
+float curr[2];
+float prev[2];
 
 int main(int argc, char **argv)
 {
@@ -91,7 +94,7 @@ int main(int argc, char **argv)
             smooth_factor = CLAMP(smooth_factor, 0, 1);
         }
 
-        draw_vumeter_data(audio.left_channel_dbs, audio.right_channel_dbs);
+        draw_vumeter_data(audio.audio_out_buffer, audio.audio_out_buffer_prev, audio.n_channels);
 
         long long frame_duration_ns = current_time_in_ns() - start_time_ns;
 
@@ -114,16 +117,16 @@ int main(int argc, char **argv)
 void print_help()
 {
     printf("%s",
-        "Usage: vumz [OPTION]...\n"
-        "\n"
-        "vumz is a simple cli vumeter."
-        "\n"
-        "Options:\n"
-        "   -D, --debug         debug mode: print useful data for devs\n"
-        "   -h, --help          show help\n"
-        "   -S, --screensaver   screensaver mode: press any key to quit\n"
-        "\n"
-    );
+           "Usage: vumz [OPTION]...\n"
+           "\n"
+           "vumz is a simple cli vumeter."
+           "\n"
+           "Options:\n"
+           "   -D, --debug         debug mode: print useful data for devs\n"
+           "   -h, --help          show help\n"
+           "   -S, --screensaver   screensaver mode: press any key to quit\n"
+           "\n"
+           );
 }
 
 long long current_time_in_ns() {

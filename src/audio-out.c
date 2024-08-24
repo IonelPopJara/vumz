@@ -94,26 +94,35 @@ void init_ncurses()
     refresh(); // Refresh the screen
 }
 
-void draw_vumeter_data(float left_channel_dbs, float right_channel_dbs)
-{
+//FIX: Updat this with the new buffer
+void draw_vumeter_data(const float* audio_out_buffer, float* audio_out_buffer_prev, int n_channels) {
+
+    // -- Get terminal dimmensions and calculate color threshold levels --
     int terminal_height, terminal_width;
     getmaxyx(stdscr, terminal_height, terminal_width);
-
     int green_threshold_height = db_to_vu_height(VUMETER_GREEN_THRESHOLD_DB, terminal_height);
     int yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, terminal_height);
 
-    // Starting positions and other shenanigans
+    // -- Calculate starting positions and other shenanigans --
     int vu_bar_width = 4;
     int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 7;
     int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 7;
 
-    // Left channel data
+    // -- Get the current buffer data and split it into left and right channels --
+    // Current left channel data
+    float left_channel_dbs = audio_out_buffer[0];
     double current_left_height = db_to_vu_height(left_channel_dbs, terminal_height);
     double left_percentage = get_fill_percentage(current_left_height);
-
-    // Right channel data
+    // Current right channel data
+    float right_channel_dbs = audio_out_buffer[1];
     double current_right_height = db_to_vu_height(right_channel_dbs, terminal_height);
     double right_percentage = get_fill_percentage(current_right_height);
+
+    // -- Get the previous buffer data and split it into left and right channels --
+    // Previous left channel data
+    float prev_left_channel_dbs = audio_out_buffer_prev[0];
+    // Previous right channel data
+    float prev_right_channel_dbs = audio_out_buffer_prev[1];
 
     // Main render
     for (int i = 0; i < terminal_height; i++)
@@ -190,6 +199,13 @@ void draw_vumeter_data(float left_channel_dbs, float right_channel_dbs)
         // Deactivate color attributes
         attroff(A_COLOR);
     }
+
+    // Print to debug
+    mvprintw(terminal_height - 2, 0, "Current Left: %.2f | Previous Left: %.2f", audio_out_buffer[0], audio_out_buffer_prev[0]);
+    mvprintw(terminal_height - 3, 0, "Current Right: %.2f | Previous Right: %.2f", audio_out_buffer[1], audio_out_buffer_prev[1]);
+    // -- Copy the current buffer data to the previous buffer data --
+    audio_out_buffer_prev[0] = audio_out_buffer[0]; // Left
+    audio_out_buffer_prev[1] = audio_out_buffer[1]; // Right
     refresh();
 }
 
