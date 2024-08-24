@@ -31,6 +31,7 @@ struct audio_data {
     float fall[2];
     float mem[2];
     double noise_reduction;
+    double framerate;
     pthread_mutex_t lock;
 };
 

@@ -5,6 +5,8 @@
 #include "audio-cap.h"
 #include <math.h>
 
+void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_index); 
+
 static float gamma_amp = 2.0f;
 
 static float amplitude_to_db(float amplitude)
@@ -41,6 +43,7 @@ static void on_process(void *userdata) {
 
     // Write to input buffer
     struct audio_data* audio = (struct audio_data*)(data->audio); // Cast the audio_data of pipewire_data
+    double gravity_mod = pow((60.0 / audio->framerate), 2.5) * 1.54 / audio->noise_reduction;
 
     // Iterate over the samples
     for (c = 0; c < n_channels; c++) {
@@ -50,12 +53,31 @@ static void on_process(void *userdata) {
             max = fmaxf(max, fabsf(samples[n]));
         }
 
-        // Amplify for fun
-        max = powf(max, gamma_amp);
+        /*
+         * This smoothing function was adapted from cava:
+         * https://github.com/karlstav/cava/blob/master/cavacore.c
+         */
 
         if (c == 0) {
+            // Process left channel audio
             float left_channel_dbs = amplitude_to_db(max);
-            audio->audio_out_buffer[0] = left_channel_dbs;
+            apply_smoothing(&left_channel_dbs, audio, 0);
+            /*float previous_dbs = audio->audio_out_buffer_prev[0];*/
+            /**/
+            /*if (left_channel_dbs < previous_dbs) {*/
+            /*    left_channel_dbs = previous_dbs * (1.0 + (audio->fall[0] * audio->fall[0] * 0.02));*/
+            /*    audio->fall[0] += 0.5;*/
+            /*}*/
+            /*else {*/
+            /*    audio->peak[0] = left_channel_dbs;*/
+            /*    audio->fall[0] = 0.0;*/
+            /*}*/
+            /**/
+            /*audio->audio_out_buffer_prev[0] = left_channel_dbs;*/
+            /**/
+            /*left_channel_dbs = audio->mem[0] * 0.2 + left_channel_dbs;*/
+            /*audio->mem[0] = left_channel_dbs;*/
+            /*audio->audio_out_buffer[0] = left_channel_dbs;*/
         }
         else if (c == 1) {
             float right_channel_dbs = amplitude_to_db(max);
@@ -65,6 +87,56 @@ static void on_process(void *userdata) {
 
     pw_stream_queue_buffer(data->stream, b);
 }
+
+void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_index) {
+    // Process channel audio
+    float previous_dbs = audio->audio_out_buffer_prev[buffer_index];
+
+    if (*channel_dbs < previous_dbs) {
+        *channel_dbs = previous_dbs * (1.0 + (audio->fall[buffer_index] * audio->fall[buffer_index] * 0.02));
+        audio->fall[buffer_index] += 0.5;
+    }
+    else {
+        audio->peak[buffer_index] = *channel_dbs;
+        audio->fall[buffer_index] = 0.0;
+    }
+
+    audio->audio_out_buffer_prev[buffer_index] = *channel_dbs;
+
+    *channel_dbs = audio->mem[buffer_index] * 0.2 + *channel_dbs;
+    audio->mem[buffer_index] = *channel_dbs;
+    audio->audio_out_buffer[buffer_index] = *channel_dbs;
+}
+
+/*void apply_smoothing(struct audio_data *audio) {*/
+/**/
+/*    for (int n = 0; n < audio->n_channels; n++) {*/
+/*        // Since the audio buffers contain the data in decibels*/
+/*        // the range of these values can be [-60, 0]*/
+/*        float curr_val = audio->audio_out_buffer[n];*/
+/*        float prev_val = audio->audio_out_buffer_prev[n];*/
+/**/
+/*        // Apply gravity effect if current value is less than previous*/
+/*        // This works with decibels, so for example:*/
+/*        // If the curr_val is -23db and prev_val was -5db*/
+/*        if (curr_val < prev_val && audio->noise_reduction > 0.1) {*/
+/*            curr_val = audio->peak[n] * (1.0 - (audio->fall[n] * audio->fall[n] * gravity_mod));*/
+/**/
+/*            audio->fall[n] += 0.028;*/
+/*        } else {*/
+/*            audio->peak[n] = curr_val;*/
+/*            audio->fall[n] = 0.0;*/
+/*        }*/
+/**/
+/*        // Update the previous frame's buffer for next iteration*/
+/*        audio->audio_out_buffer_prev[n] = curr_val;*/
+/**/
+/*        // I guess the final touch is the integral smoothing which is just the memory*/
+/*        curr_val = audio->mem[n] * audio->noise_reduction + curr_val;*/
+/*        audio->mem[n] = curr_val;*/
+/*        audio->audio_out_buffer[n] = curr_val;*/
+/*    }*/
+/*}*/
 
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param) {
     struct pipewire_data *data = _data;
