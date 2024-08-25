@@ -7,8 +7,6 @@
 
 void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_index); 
 
-static float gamma_amp = 2.0f;
-
 static float amplitude_to_db(float amplitude)
 {
     if (amplitude <= 0.0f)
@@ -25,8 +23,6 @@ static void on_process(void *userdata) {
     struct spa_buffer *buf;
     float *samples, max;
     uint32_t c, n, n_channels, n_samples;
-
-    // TODO: Add a terminate bool here for the vumz struct
 
     if(data->audio->terminate == 1) {
         pw_main_loop_quit(data->loop);
@@ -67,7 +63,6 @@ static void on_process(void *userdata) {
             apply_smoothing(&right_channel_dbs, audio, 1);
         }
     }
-
     pw_stream_queue_buffer(data->stream, b);
 }
 

@@ -116,8 +116,8 @@ int main(int argc, char **argv)
         // Lock the audio data before processing
         /*pthread_mutex_lock(&audio.lock);*/
 
-        // Apply smoothing
-        /*apply_smoothing2(&audio);*/
+        // Apply smoothing to one side
+        /*custom_cava_filter(&audio.audio_out_buffer[0], &audio, 0);*/
 
         // Unlock the audio data after processing
         /*pthread_mutex_unlock(&audio.lock);*/
