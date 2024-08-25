@@ -1,9 +1,11 @@
 /*
  * VUMZ (VU Meter visualiZer)
  * TODO:
- *  - [x] Add a buffer to store previous frames
- *  - [x] Add a starting line that never dissapears
- *  - [x] Add gravity simulation? or some smoothing
+ * - [x] Implement color changes
+ * - [x] Fix ncurses and pipewire not closing properly
+ * - [x] Optimize rendering cycle
+ * - [ ] Add 3d effect
+ * - [ ] Improve sensitivity
  */
 
 #include <stdio.h>
@@ -14,6 +16,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 #include "audio-cap.h"
 #include "audio-out.h"
 
@@ -21,6 +24,7 @@
 
 void print_help();
 long long current_time_in_ns();
+void handle_sigint(int sig);
 
 float curr[2];
 float prev[2];
@@ -31,6 +35,8 @@ double gravity_mod = 0.12;
 
 int main(int argc, char **argv)
 {
+    signal(SIGINT, handle_sigint); // Set up signal interrupt
+
     pthread_t audio_thread;
     struct audio_data audio = {};
     audio.noise_reduction = noise_reduction;
@@ -41,6 +47,9 @@ int main(int argc, char **argv)
     audio.audio_out_buffer[1] = -60.0f;
     audio.mem[0] = -60.0f;
     audio.mem[1] = -60.0f;
+    audio.terminate = 0;
+    audio.wasThisShitWorking = 0;
+    audio.color_theme = 2;
 
     pthread_mutex_init(&audio.lock, NULL);
 
@@ -87,36 +96,34 @@ int main(int argc, char **argv)
     {
         long long start_time_ns = current_time_in_ns();
 
-        /*if (screensaver_mode && getch() != ERR)*/
-        /*{*/
-        /*    break;*/
-        /*}*/
-        /*else if (!screensaver_mode)*/
-        /*{*/
-        /*    int c = getch();*/
-        /*    switch (c) {*/
-        /*        case KEY_UP:*/
-        /*            gravity_mod += 0.1;*/
-        /*            break;*/
-        /*        case KEY_DOWN:*/
-        /*            gravity_mod -= 0.1;*/
-        /*            break;*/
-        /*    }*/
-        /**/
-        /*    audio.noise_reduction = CLAMP(audio.noise_reduction, 0, 200);*/
-        /*}*/
+        if (screensaver_mode && getch() != ERR)
+        {
+            break;
+        }
+        else if (!screensaver_mode)
+        {
+            int c = getch();
+            switch (c) {
+                case KEY_UP:
+                    gravity_mod += 0.1;
+                    break;
+                case KEY_DOWN:
+                    gravity_mod -= 0.1;
+                    break;
+                case KEY_LEFT:
+                    audio.color_theme -= 1;
+                    if (audio.color_theme < 0) audio.color_theme = 6;
+                    break;
+                case KEY_RIGHT:
+                    audio.color_theme = (audio.color_theme + 1) % 7;
+                    break;
+            }
 
-        // Lock the audio data before processing
-        pthread_mutex_lock(&audio.lock);
-
-        // Apply smoothing
-        /*apply_smoothing2(&audio);*/
-
-        // Unlock the audio data after processing
-        pthread_mutex_unlock(&audio.lock);
+            audio.noise_reduction = CLAMP(audio.noise_reduction, 0, 200);
+        }
 
         // Draw vumeter data
-        draw_vumeter_data(audio.audio_out_buffer, audio.audio_out_buffer_prev, audio.n_channels, gravity_mod);
+        draw_vumeter_data(&audio);
 
         long long frame_duration_ns = current_time_in_ns() - start_time_ns;
 
@@ -129,11 +136,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error");
         return EXIT_FAILURE;
     }
-
-    printf("Audio finished\n");
-    cleanup_ncurses();
-
-    exit(EXIT_SUCCESS);
 }
 
 void print_help()
@@ -155,5 +157,11 @@ long long current_time_in_ns() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+void handle_sigint(int sig) {
+    cleanup_ncurses();
+    printf("Thank you for using vumz :)\n");
+    exit(EXIT_SUCCESS);
 }
 

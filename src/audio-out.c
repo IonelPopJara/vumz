@@ -7,7 +7,7 @@
 
 // 100%, 87.5%, 75%, 62.5%, 50%, 37.5%, 25%, 12.5%, 0%
 /*static char* fill_percentage[8] = {"█", "▇", "▆", "▅", "▄", "▃", "▂", "▁"};*/
-static char* fill_percentage[8] = {"+", "=", "=", "~", "-", "-", "_", "_"};
+static char* fill_percentage[9] = {"+", "=", "=", "~", "-", "-", "_", "_", "·"};
 
 static double db_to_vu_height(float db, int vu_height)
 {
@@ -96,9 +96,11 @@ void init_ncurses()
     refresh(); // Refresh the screen
 }
 
-//TODO: Use the previous buffer to optimize rendering
-void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buffer_prev, int n_channels, double noise_reduction) {
-
+//TODO: Optimize rendering
+void draw_vumeter_data(const struct audio_data* audio) {
+    // -- Get output buffers --
+    const float* audio_out_buffer = audio->audio_out_buffer;
+    const float* audio_out_buffer_prev = audio->audio_out_buffer_prev;
     // -- Get terminal dimmensions and calculate color threshold levels --
     int terminal_height, terminal_width;
     getmaxyx(stdscr, terminal_height, terminal_width);
@@ -106,203 +108,175 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
     int yellow_threshold_height = db_to_vu_height(VUMETER_YELLOW_THRESHOLD_DB, terminal_height);
 
     // -- Calculate starting positions and other shenanigans --
-    int vu_bar_width = terminal_width / 3;
+    int vu_bar_width = terminal_width / 4;
+    /*int vu_bar_width = 5;*/
     int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 3;
     int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 3;
 
-    // -- Get the current buffer data and split it into left and right channels --
-    // Current left channel data
-    float left_channel_dbs = audio_out_buffer[0];
-    double current_left_height = db_to_vu_height(left_channel_dbs, terminal_height);
-    double left_percentage = get_fill_percentage(current_left_height);
-    // Current right channel data
-    float right_channel_dbs = audio_out_buffer[1];
-    double current_right_height = db_to_vu_height(right_channel_dbs, terminal_height);
-    double right_percentage = get_fill_percentage(current_right_height);
+    // -- Get the current buffer data of the left channel --
+    double current_left_height = db_to_vu_height(audio_out_buffer[0], terminal_height); // Current left channel height as a decimal
+    int current_left_block_height = (int) current_left_height; // Current left channel height as an integer
+    double left_percentage = get_fill_percentage(current_left_height); // Percentage of filling for the decimal part (e,g,. 2.75 => 75%)
 
-    // -- Get the previous buffer data and split it into left and right channels --
-    // Previous left channel data
-    float prev_left_channel_dbs = audio_out_buffer_prev[0];
-    double previous_left_height = db_to_vu_height(prev_left_channel_dbs, terminal_height);
-    // Previous right channel data
-    float prev_right_channel_dbs = audio_out_buffer_prev[1];
-    double previous_right_height = db_to_vu_height(prev_right_channel_dbs, terminal_height);
+    // -- Get the current buffer data of the right channel --
+    double current_right_height = db_to_vu_height(audio_out_buffer[1], terminal_height); // Current right channel height as a decimal
+    int current_right_block_height = (int) current_right_height; // Current right channel height as an integer
+    double right_percentage = get_fill_percentage(current_right_height); // Percentage of filling for the decimal part
 
-    // Main render
-    for (int i = 0; i < terminal_height; i++)
-    {
-        attron(COLOR_PAIR(2)); // yellow
-        /*// Apply color according to db*/
-        /*if (terminal_height - i < green_threshold_height) {*/
-        /*    attron(COLOR_PAIR(1)); // green*/
-        /*}*/
-        /*else if (terminal_height - i < yellow_threshold_height) {*/
-        /*    attron(COLOR_PAIR(2)); // yellow*/
-        /*}*/
-        /*else {*/
-        /*    attron(COLOR_PAIR(3)); // red*/
-        /*}*/
+    // -- Get the previous buffer data of the left channel --
+    double previous_left_height = db_to_vu_height(audio_out_buffer_prev[0], terminal_height); // Previous left channel height as a decimal
+    int previous_left_block_height = (int) previous_left_height; // Previous left channel height as an integer
 
-        // Render left channel
-        // If the height we're checking (term_h - i) is supposed to be part of the colored vumeter
-        // Compare against the previous frame to reduce the amount of redrawn pixels
-        // If the previous frame had a lower height, we need to color the pixels
-        /*if (terminal_height - i <= (int) current_left_height && terminal_height - i > (int) previous_left_height) {*/
-        /*
-             * c     p       i  t - i
-             * ----------------------
-             * -     -       0    8
-             * .5    -       1    7
-             * 6     -       2    6     ---
-             * -     -       3    5      |
-             * -     -       4    4      | area of interest
-             * -     -       5    3      |
-             * -     .5      6    2     ---
-             * -     1       7    1
-             * ---------------
-             * term_height = 8
-             */
-        // Draw a colored block;
-        /*    for (int j = 0; j < vu_bar_width; j++)*/
-        /*    {*/
-        /*        // check how tall the block should be*/
-        /*        mvprintw(0 + i, startx_left + j, "█");*/
-        /*    }*/
-        /*}*/
-        // Check for the top block
-        /*else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {*/
-        /*else if ((float)(terminal_height - i) < (float)(current_left_height) + 1.0f && (float)(terminal_height - i) > (float)current_left_height) {*/
-        /*
-             * c     p(!)    i  t - i
-             * ----------------------
-             * -     -       0    8
-             * .5    -       1    7     --- area of interest
-             * 6     -       2    6
-             * -     -       3    5
-             * -     -       4    4
-             * -     -       5    3
-             * -     .5      6    2
-             * -     1       7    1
-             * ---------------
-             * term_height = 8
-             */
-        // Check the percentage
-        /*    int fill_index = get_fill_percentage_index(left_percentage);*/
-        /**/
-        /*    for (int j = 0; j < vu_bar_width; j++)*/
-        /*    {*/
-        /*        mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);*/
-        /*    }*/
-        /*}*/
-        /*else if (terminal_height - i > current_left_height + 1 && terminal_height - i <= previous_left_height + 1) {*/
-        /*
-             * c     p       i  t - i
-             * ----------------------
-             * -     -       0    8
-             * -     -       1    7
-             * -     .5      2    6     --- area of interest
-             * -     5       3    5      |
-             * -     -       4    4     ---
-             * .5    -       5    3  - first condition stops here
-             * 2     -       6    2
-             * -     -       7    1
-             * ---------------
-             * term_height = 8
-             */
-        // Clear the pixels
-        /*    for (int j = 0; j < vu_bar_width; j++)*/
-        /*    {*/
-        /*        mvprintw(0 + i, startx_left + j, " ");*/
-        /*    }*/
-        /*}*/
+    // -- Get the previous buffer data of the right channel --
+    double previous_right_height = db_to_vu_height(audio_out_buffer_prev[1], terminal_height); // Previous right channel height as a decimal
+    int previous_right_block_height = (int) previous_right_height; // Previous right channel height as an integer
 
-        // Render left channel
-        if (terminal_height - i <= current_left_height) {
-            attron(COLOR_PAIR(2)); // yellow
-            // Draw a colored block;
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                // check how tall the block should be
-                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[0]);
-            }
-            attroff(COLOR_PAIR(2)); // yellow
+    // NOTE: Apparently, due to how my smooth function works, current height will never be greater than previous height (?) I don't get it
+    bool isThisWorking = false;
 
-        }
-        else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {
-            attron(COLOR_PAIR(2)); // yellow
-            // If it is the top block
-            // Check the percentage
-            int fill_index = get_fill_percentage_index(left_percentage);
-
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);
-            }
-            attroff(COLOR_PAIR(2)); // yellow
-        }
-        else {
-            attron(COLOR_PAIR(6)); // grey?
-            // If it's none of the above
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_left + j, "·");
-            }
-            attroff(COLOR_PAIR(6)); // grey?
-        }
-
-        // Render right channel
-        if (terminal_height - i <= current_right_height) {
-            attron(COLOR_PAIR(2)); // yellow
-            // Draw a colored block;
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                // check how tall the block should be
-                mvprintw(0 + i, startx_right + j, "%s", fill_percentage[0]);
-            }
-            attroff(COLOR_PAIR(2)); // yellow
-
-        }
-        else if (terminal_height - i > current_right_height && terminal_height - i < current_right_height + 1) {
-            // If it is the top block
-            // Check the percentage
-            int fill_index = get_fill_percentage_index(right_percentage);
-
-            attron(COLOR_PAIR(2)); // yellow
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_right + j, "%s", fill_percentage[fill_index]);
-            }
-            attroff(COLOR_PAIR(2)); // yellow
-        }
-        else {
-            attron(COLOR_PAIR(6)); // grey?
-            // If it's none of the above
-            for (int j = 0; j < vu_bar_width; j++)
-            {
-                mvprintw(0 + i, startx_right + j, "·");
-            }
-            attroff(COLOR_PAIR(6)); // grey?
-        }
-
-
-        // Render everything in between
+    // Main render call
+    attron(COLOR_PAIR(6)); // gray
+    for (int i = 0; i < terminal_height - 1; i++) { 
         for (int j = 0; j < terminal_width; j++) {
-            if ((j <= startx_left) || (j >= startx_left + vu_bar_width && j <= startx_right) || (j >= startx_right + vu_bar_width)) {
-                attron(COLOR_PAIR(6)); // grey?
-                mvprintw(0 + i, j, "·");
+            // If the current area is outside/in between the vu bars
+            if ((j < startx_left || j >= startx_right + vu_bar_width) || (j >= startx_left + vu_bar_width && j < startx_right)) {
+                attroff(A_COLOR);
+                attron(COLOR_PAIR(6)); // gray
+                mvprintw(i, j, "%s", fill_percentage[8]);
+                attroff(A_COLOR);
             }
-            else if (i == terminal_height - 1) {
-                attron(COLOR_PAIR(2)); // yellow
-                mvprintw(terminal_height - 1, j, "%sasdasdd", fill_percentage[0]);
+            // Else if we are inside the left vumeter
+            else if (j >= startx_left && j < startx_left + vu_bar_width){
+                attroff(A_COLOR);
+                if (audio->color_theme <= 5) {
+                    attron(COLOR_PAIR(audio->color_theme));
+                }
+                else {
+                    // Use the green yellow red theme
+                    // Calculate coordinates
+                    if (terminal_height - i < green_threshold_height) {
+                        attron(COLOR_PAIR(1));
+                    }
+                    else if (terminal_height - i < yellow_threshold_height) {
+                        attron(COLOR_PAIR(2));
+                    }
+                    else {
+                        attron(COLOR_PAIR(3));
+                    }
+                }
+
+                if (terminal_height - i <= current_left_block_height) {
+                    // Full block
+                    mvprintw(i, j, "%s", fill_percentage[0]);
+                }
+                else if (terminal_height - i < current_left_height + 1 && terminal_height - i > current_left_height) {
+                    // Percentage fill
+                    int fill_index = get_fill_percentage_index(left_percentage);
+                    mvprintw(i, j, "%s", fill_percentage[fill_index]);
+                }
+                else {
+                    attroff(A_COLOR);
+                    attron(COLOR_PAIR(6)); // gray
+                    // Dot
+                    mvprintw(i, j, "%s", fill_percentage[8]);
+                    attroff(A_COLOR);
+                }
+                attroff(A_COLOR);
+            }
+            else if (j >= startx_right && j < startx_right + vu_bar_width) {
+
+                attroff(A_COLOR);
+                if (audio->color_theme <= 5) {
+                    attron(COLOR_PAIR(audio->color_theme));
+                }
+                else {
+                    // Use the green yellow red theme
+                    // Calculate coordinates
+                    if (terminal_height - i < green_threshold_height) {
+                        attron(COLOR_PAIR(1));
+                    }
+                    else if (terminal_height - i < yellow_threshold_height) {
+                        attron(COLOR_PAIR(2));
+                    }
+                    else {
+                        attron(COLOR_PAIR(3));
+                    }
+                }
+
+                if (terminal_height - i <= current_right_block_height) {
+                    // Full block
+                    mvprintw(i, j, "%s", fill_percentage[0]);
+                }
+                else if (terminal_height - i < current_right_height + 1 && terminal_height - i > current_right_height) {
+                    // Percentage fill
+                    int fill_index = get_fill_percentage_index(right_percentage);
+                    mvprintw(i, j, "%s", fill_percentage[fill_index]);
+                }
+                else {
+                    attroff(A_COLOR);
+                    attron(COLOR_PAIR(6)); // gray
+                    // Dot
+                    mvprintw(i, j, "%s", fill_percentage[8]);
+                    attroff(A_COLOR);
+                }
+                attroff(A_COLOR);
             }
         }
-        // Deactivate color attributes
-        attroff(A_COLOR);
     }
+    // Render bottom line
+    for (int j = 0; j < terminal_width; j++) {
+        // If the current area is outside/in between the vu bars
+        if ((j < startx_left || j >= startx_right + vu_bar_width) || (j >= startx_left + vu_bar_width && j < startx_right)) {
+            attroff(A_COLOR);
+            attron(COLOR_PAIR(6)); // gray
+            mvprintw(terminal_height - 1, j, "%s", fill_percentage[8]);
+            attroff(A_COLOR);
+        }
+        // Else if we are inside the left vumeter
+        else if (j >= startx_left && j < startx_left + vu_bar_width){
+            attroff(A_COLOR);
+            if (audio->color_theme <= 5) {
+                attron(COLOR_PAIR(audio->color_theme));
+            }
+            else {
+                // Use the green yellow red theme
+                attron(COLOR_PAIR(1));
+            }
+
+            if (current_left_height <= 2)
+            {
+                mvprintw(terminal_height - 1, j, "%s", fill_percentage[2]);
+            }
+            else {
+                mvprintw(terminal_height - 1, j, "%s", fill_percentage[0]);
+            }
+            attroff(A_COLOR);
+        }
+        else if (j >= startx_right && j < startx_right + vu_bar_width) {
+            attroff(A_COLOR);
+            if (audio->color_theme <= 5) {
+                attron(COLOR_PAIR(audio->color_theme));
+            }
+            else {
+                // Use the green yellow red theme
+                attron(COLOR_PAIR(1));
+            }
+            if (current_right_height <= 2)
+            {
+                mvprintw(terminal_height - 1, j, "%s", fill_percentage[2]);
+            }
+            else {
+                mvprintw(terminal_height - 1, j, "%s", fill_percentage[0]);
+            }
+            attroff(A_COLOR);
+        }
+    }
+    attroff(A_COLOR);
 
     // Print to debug
-    /*mvprintw(terminal_height - 2, 0, "Gravity: %.5f", noise_reduction);*/
-    /*mvprintw(terminal_height - 3, 0, "Current Right: %.2f | Previous Right: %.2f", audio_out_buffer[1], audio_out_buffer_prev[1]);*/
+    /*mvprintw(0, 0, "Color theme: %d", audio->color_theme);*/
+    /*mvprintw(1, 0, "Previous height: %d", previous_left_block_height);*/
+    /*mvprintw(2, 0, "IsThisWorking: %d", isThisWorking);*/
     refresh();
 }
 
@@ -311,3 +285,4 @@ void cleanup_ncurses()
     endwin();
     system("clear");
 }
+

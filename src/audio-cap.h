@@ -27,12 +27,15 @@ struct audio_data {
     int n_channels;     // Number of channels (buffer size)
     float audio_out_buffer[2];   // Output buffer of size 2 (2 channels)
     float audio_out_buffer_prev[2];   // Previous output buffer
-    float peak[2];
-    float fall[2];
-    float mem[2];
-    double noise_reduction;
-    double framerate;
-    pthread_mutex_t lock;
+    float peak[2];      // For smoothing
+    float fall[2];      // For smoothing
+    float mem[2];       // For smoothing
+    double noise_reduction; // For smoothing
+    double framerate;   // Stores the framerate of the vumeter
+    pthread_mutex_t lock; // For synchronization
+    int terminate;      // To terminate audio thread
+    int wasThisShitWorking; // Boolean to debug stuff
+    int color_theme; // Integer within a range to determine the color theme
 };
 
 void *input_pipewire(void *audiodata);
