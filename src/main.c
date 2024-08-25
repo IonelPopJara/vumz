@@ -2,8 +2,8 @@
  * VUMZ (VU Meter visualiZer)
  * TODO:
  *  - [x] Add a buffer to store previous frames
- *  - [ ] Add a starting line that never dissapears
- *  - [ ] Add gravity simulation? or some smoothing
+ *  - [x] Add a starting line that never dissapears
+ *  - [x] Add gravity simulation? or some smoothing
  */
 
 #include <stdio.h>

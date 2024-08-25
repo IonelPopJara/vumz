@@ -285,11 +285,15 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
         }
 
 
-        attron(COLOR_PAIR(6)); // grey?
         // Render everything in between
         for (int j = 0; j < terminal_width; j++) {
             if ((j <= startx_left) || (j >= startx_left + vu_bar_width && j <= startx_right) || (j >= startx_right + vu_bar_width)) {
+                attron(COLOR_PAIR(6)); // grey?
                 mvprintw(0 + i, j, "·");
+            }
+            else if (i == terminal_height - 1) {
+                attron(COLOR_PAIR(2)); // yellow
+                mvprintw(terminal_height - 1, j, "%sasdasdd", fill_percentage[0]);
             }
         }
         // Deactivate color attributes
