@@ -1,9 +1,9 @@
 /*
  * VUMZ (VU Meter visualiZer)
  * TODO:
- * - [ ] Implement color changes
+ * - [x] Implement color changes
  * - [x] Fix ncurses and pipewire not closing properly
- * - [ ] Optimize rendering cycle
+ * - [x] Optimize rendering cycle
  * - [ ] Add 3d effect
  * - [ ] Improve sensitivity
  */
@@ -48,6 +48,8 @@ int main(int argc, char **argv)
     audio.mem[0] = -60.0f;
     audio.mem[1] = -60.0f;
     audio.terminate = 0;
+    audio.wasThisShitWorking = 0;
+    audio.color_theme = 2;
 
     pthread_mutex_init(&audio.lock, NULL);
 
@@ -108,22 +110,20 @@ int main(int argc, char **argv)
                 case KEY_DOWN:
                     gravity_mod -= 0.1;
                     break;
+                case KEY_LEFT:
+                    audio.color_theme -= 1;
+                    if (audio.color_theme < 0) audio.color_theme = 6;
+                    break;
+                case KEY_RIGHT:
+                    audio.color_theme = (audio.color_theme + 1) % 7;
+                    break;
             }
 
             audio.noise_reduction = CLAMP(audio.noise_reduction, 0, 200);
         }
 
-        // Lock the audio data before processing
-        /*pthread_mutex_lock(&audio.lock);*/
-
-        // Apply smoothing to one side
-        /*custom_cava_filter(&audio.audio_out_buffer[0], &audio, 0);*/
-
-        // Unlock the audio data after processing
-        /*pthread_mutex_unlock(&audio.lock);*/
-
         // Draw vumeter data
-        draw_vumeter_data(audio.audio_out_buffer, audio.audio_out_buffer_prev, audio.n_channels, gravity_mod);
+        draw_vumeter_data(&audio);
 
         long long frame_duration_ns = current_time_in_ns() - start_time_ns;
 

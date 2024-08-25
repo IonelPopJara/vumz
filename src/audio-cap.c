@@ -57,6 +57,7 @@ static void on_process(void *userdata) {
             // Process left channel audio
             float left_channel_dbs = amplitude_to_db(max);
             apply_smoothing(&left_channel_dbs, audio, 0);
+            /*audio->audio_out_buffer[c] = left_channel_dbs;*/
         }
         else if (c == 1) {
             float right_channel_dbs = amplitude_to_db(max);
@@ -82,11 +83,15 @@ void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_in
         audio->fall[buffer_index] = 0.0;
     }
 
+    /*audio->audio_out_buffer_prev[buffer_index] = audio->audio_out_buffer[buffer_index];*/
     audio->audio_out_buffer_prev[buffer_index] = *channel_dbs;
 
     *channel_dbs = audio->mem[buffer_index] * 0.2 + *channel_dbs;
     audio->mem[buffer_index] = *channel_dbs;
     audio->audio_out_buffer[buffer_index] = *channel_dbs;
+
+    /*audio->audio_out_buffer_prev[buffer_index] = audio->audio_out_buffer[buffer_index];*/
+    /*audio->audio_out_buffer[buffer_index] = *channel_dbs;*/
 }
 
 static void on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param) {
