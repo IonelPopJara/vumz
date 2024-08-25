@@ -6,7 +6,8 @@
 #define VUMETER_YELLOW_THRESHOLD_DB -10.0f
 
 // 100%, 87.5%, 75%, 62.5%, 50%, 37.5%, 25%, 12.5%, 0%
-static char* fill_percentage[8] = {"█", "▇", "▆", "▅", "▄", "▃", "▂", "▁"};
+/*static char* fill_percentage[8] = {"█", "▇", "▆", "▅", "▄", "▃", "▂", "▁"};*/
+static char* fill_percentage[8] = {"+", "=", "=", "~", "-", "-", "_", "_"};
 
 static double db_to_vu_height(float db, int vu_height)
 {
@@ -89,6 +90,7 @@ void init_ncurses()
         init_pair(3, COLOR_RED, -1); // Third color pair, this will be used for the higher volume levels
         init_pair(4, COLOR_MAGENTA, -1); // Fourth color pair, this will be used for the debug window
         init_pair(5, COLOR_BLUE, -1); // Fifth color pair, this will be used for the debug window
+        init_pair(6, 8, -1); // Grey?
     }
 
     refresh(); // Refresh the screen
@@ -105,8 +107,8 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
 
     // -- Calculate starting positions and other shenanigans --
     int vu_bar_width = terminal_width / 3;
-    int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 4;
-    int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 4;
+    int startx_left = (terminal_width / 4) - (vu_bar_width / 2) + 3;
+    int startx_right = (3 * terminal_width / 4) - (vu_bar_width / 2) - 3;
 
     // -- Get the current buffer data and split it into left and right channels --
     // Current left channel data
@@ -129,23 +131,24 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
     // Main render
     for (int i = 0; i < terminal_height; i++)
     {
-        // Apply color according to db
-        if (terminal_height - i < green_threshold_height) {
-            attron(COLOR_PAIR(1)); // green
-        }
-        else if (terminal_height - i < yellow_threshold_height) {
-            attron(COLOR_PAIR(2)); // yellow
-        }
-        else {
-            attron(COLOR_PAIR(3)); // red
-        }
+        attron(COLOR_PAIR(2)); // yellow
+        /*// Apply color according to db*/
+        /*if (terminal_height - i < green_threshold_height) {*/
+        /*    attron(COLOR_PAIR(1)); // green*/
+        /*}*/
+        /*else if (terminal_height - i < yellow_threshold_height) {*/
+        /*    attron(COLOR_PAIR(2)); // yellow*/
+        /*}*/
+        /*else {*/
+        /*    attron(COLOR_PAIR(3)); // red*/
+        /*}*/
 
         // Render left channel
         // If the height we're checking (term_h - i) is supposed to be part of the colored vumeter
         // Compare against the previous frame to reduce the amount of redrawn pixels
         // If the previous frame had a lower height, we need to color the pixels
         /*if (terminal_height - i <= (int) current_left_height && terminal_height - i > (int) previous_left_height) {*/
-            /*
+        /*
              * c     p       i  t - i
              * ----------------------
              * -     -       0    8
@@ -159,7 +162,7 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
              * ---------------
              * term_height = 8
              */
-            // Draw a colored block;
+        // Draw a colored block;
         /*    for (int j = 0; j < vu_bar_width; j++)*/
         /*    {*/
         /*        // check how tall the block should be*/
@@ -169,7 +172,7 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
         // Check for the top block
         /*else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {*/
         /*else if ((float)(terminal_height - i) < (float)(current_left_height) + 1.0f && (float)(terminal_height - i) > (float)current_left_height) {*/
-            /*
+        /*
              * c     p(!)    i  t - i
              * ----------------------
              * -     -       0    8
@@ -183,7 +186,7 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
              * ---------------
              * term_height = 8
              */
-            // Check the percentage
+        // Check the percentage
         /*    int fill_index = get_fill_percentage_index(left_percentage);*/
         /**/
         /*    for (int j = 0; j < vu_bar_width; j++)*/
@@ -192,7 +195,7 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
         /*    }*/
         /*}*/
         /*else if (terminal_height - i > current_left_height + 1 && terminal_height - i <= previous_left_height + 1) {*/
-            /*
+        /*
              * c     p       i  t - i
              * ----------------------
              * -     -       0    8
@@ -206,7 +209,7 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
              * ---------------
              * term_height = 8
              */
-            // Clear the pixels
+        // Clear the pixels
         /*    for (int j = 0; j < vu_bar_width; j++)*/
         /*    {*/
         /*        mvprintw(0 + i, startx_left + j, " ");*/
@@ -215,15 +218,18 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
 
         // Render left channel
         if (terminal_height - i <= current_left_height) {
+            attron(COLOR_PAIR(2)); // yellow
             // Draw a colored block;
             for (int j = 0; j < vu_bar_width; j++)
             {
                 // check how tall the block should be
-                mvprintw(0 + i, startx_left + j, "█");
+                mvprintw(0 + i, startx_left + j, "%s", fill_percentage[0]);
             }
+            attroff(COLOR_PAIR(2)); // yellow
 
         }
         else if (terminal_height - i > current_left_height && terminal_height - i < current_left_height + 1) {
+            attron(COLOR_PAIR(2)); // yellow
             // If it is the top block
             // Check the percentage
             int fill_index = get_fill_percentage_index(left_percentage);
@@ -232,23 +238,28 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
             {
                 mvprintw(0 + i, startx_left + j, "%s", fill_percentage[fill_index]);
             }
+            attroff(COLOR_PAIR(2)); // yellow
         }
         else {
+            attron(COLOR_PAIR(6)); // grey?
             // If it's none of the above
             for (int j = 0; j < vu_bar_width; j++)
             {
-                mvprintw(0 + i, startx_left + j, " ");
+                mvprintw(0 + i, startx_left + j, "·");
             }
+            attroff(COLOR_PAIR(6)); // grey?
         }
 
         // Render right channel
         if (terminal_height - i <= current_right_height) {
+            attron(COLOR_PAIR(2)); // yellow
             // Draw a colored block;
             for (int j = 0; j < vu_bar_width; j++)
             {
                 // check how tall the block should be
-                mvprintw(0 + i, startx_right + j, "█");
+                mvprintw(0 + i, startx_right + j, "%s", fill_percentage[0]);
             }
+            attroff(COLOR_PAIR(2)); // yellow
 
         }
         else if (terminal_height - i > current_right_height && terminal_height - i < current_right_height + 1) {
@@ -256,19 +267,31 @@ void draw_vumeter_data(const float* audio_out_buffer, const float* audio_out_buf
             // Check the percentage
             int fill_index = get_fill_percentage_index(right_percentage);
 
+            attron(COLOR_PAIR(2)); // yellow
             for (int j = 0; j < vu_bar_width; j++)
             {
                 mvprintw(0 + i, startx_right + j, "%s", fill_percentage[fill_index]);
             }
+            attroff(COLOR_PAIR(2)); // yellow
         }
         else {
+            attron(COLOR_PAIR(6)); // grey?
             // If it's none of the above
             for (int j = 0; j < vu_bar_width; j++)
             {
-                mvprintw(0 + i, startx_right + j, " ");
+                mvprintw(0 + i, startx_right + j, "·");
             }
+            attroff(COLOR_PAIR(6)); // grey?
         }
 
+
+        attron(COLOR_PAIR(6)); // grey?
+        // Render everything in between
+        for (int j = 0; j < terminal_width; j++) {
+            if ((j <= startx_left) || (j >= startx_left + vu_bar_width && j <= startx_right) || (j >= startx_right + vu_bar_width)) {
+                mvprintw(0 + i, j, "·");
+            }
+        }
         // Deactivate color attributes
         attroff(A_COLOR);
     }

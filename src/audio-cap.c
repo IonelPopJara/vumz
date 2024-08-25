@@ -53,48 +53,31 @@ static void on_process(void *userdata) {
             max = fmaxf(max, fabsf(samples[n]));
         }
 
-        /*
-         * This smoothing function was adapted from cava:
-         * https://github.com/karlstav/cava/blob/master/cavacore.c
-         */
-
         if (c == 0) {
             // Process left channel audio
             float left_channel_dbs = amplitude_to_db(max);
             apply_smoothing(&left_channel_dbs, audio, 0);
-            /*float previous_dbs = audio->audio_out_buffer_prev[0];*/
-            /**/
-            /*if (left_channel_dbs < previous_dbs) {*/
-            /*    left_channel_dbs = previous_dbs * (1.0 + (audio->fall[0] * audio->fall[0] * 0.02));*/
-            /*    audio->fall[0] += 0.5;*/
-            /*}*/
-            /*else {*/
-            /*    audio->peak[0] = left_channel_dbs;*/
-            /*    audio->fall[0] = 0.0;*/
-            /*}*/
-            /**/
-            /*audio->audio_out_buffer_prev[0] = left_channel_dbs;*/
-            /**/
-            /*left_channel_dbs = audio->mem[0] * 0.2 + left_channel_dbs;*/
-            /*audio->mem[0] = left_channel_dbs;*/
-            /*audio->audio_out_buffer[0] = left_channel_dbs;*/
         }
         else if (c == 1) {
             float right_channel_dbs = amplitude_to_db(max);
-            audio->audio_out_buffer[1] = right_channel_dbs;
+            apply_smoothing(&right_channel_dbs, audio, 1);
         }
     }
 
     pw_stream_queue_buffer(data->stream, b);
 }
 
+/*
+ * This smoothing function was adapted from cava:
+ * https://github.com/karlstav/cava/blob/master/cavacore.c
+ */
 void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_index) {
     // Process channel audio
     float previous_dbs = audio->audio_out_buffer_prev[buffer_index];
 
     if (*channel_dbs < previous_dbs) {
-        *channel_dbs = previous_dbs * (1.0 + (audio->fall[buffer_index] * audio->fall[buffer_index] * 0.02));
-        audio->fall[buffer_index] += 0.5;
+        *channel_dbs = previous_dbs * (1.0 + (audio->fall[buffer_index] * audio->fall[buffer_index] * 0.03));
+        audio->fall[buffer_index] += 0.98;
     }
     else {
         audio->peak[buffer_index] = *channel_dbs;
