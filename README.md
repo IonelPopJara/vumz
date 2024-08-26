@@ -64,7 +64,7 @@ static float amplitude_to_db(float amplitude)
 
 This function was ~~stolen from some random stackoverflow post I don't remember~~ derived from the formula `db = 20 * log10(amplitude)`.
 
-The dB value is then used to draw the VU meter using `ncurses`.
+The dB value is then compared to the previous value and smoothed out using a function that I reword from the [cava](https://github.com/karlstav/cava) source code. Once the signal has been smoothed out, it is used to draw the VU meter using `ncurses`.
 
 ## Man Page
 
@@ -82,13 +82,12 @@ Some of the code for ncurses was modified from [NCURSES Programming HOWTO](https
 
 Some of the PipeWire code was taken directly from the [audio-capture example](https://docs.pipewire.org/audio-capture_8c-example.html#a9) in their documentation.
 
+The main smoothing function was reworked from [cava](https://github.com/karlstav/cava).
 ## Inspiration
 
 After playing around with [cava](https://github.com/karlstav/cava) and [cbonsai](https://gitlab.com/jallbrit/cbonsai), I thought it would be fun to make a simple program to capture audio from my computer and graph it in real-time.
 
 ## TODO Ideas
 
-- [ ] Smooth out the VU meter animation
-- [ ] Add more color options
 - [ ] Add sensitivity option
 
