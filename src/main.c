@@ -26,12 +26,8 @@ void print_help();
 long long current_time_in_ns();
 void handle_sigint(int sig);
 
-float curr[2];
-float prev[2];
-
 static double framerate = 60.0;
 static double noise_reduction = 77.0;
-double gravity_mod = 0.12;
 
 int main(int argc, char **argv)
 {
@@ -48,7 +44,7 @@ int main(int argc, char **argv)
     audio.mem[0] = -60.0f;
     audio.mem[1] = -60.0f;
     audio.terminate = 0;
-    audio.wasThisShitWorking = 0;
+    audio.debug = 0;
     audio.color_theme = 2;
 
     pthread_mutex_init(&audio.lock, NULL);
@@ -59,7 +55,6 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    bool debug_mode = false;
     bool screensaver_mode = false;
 
     // Check command line arguments
@@ -67,7 +62,7 @@ int main(int argc, char **argv)
     {
         if (strcmp(argv[i], "-D") == 0 || strcmp(argv[i], "--debug") == 0)
         {
-            debug_mode = true;
+            audio.debug = 1;
         }
         else if (strcmp(argv[i], "-S") == 0 || strcmp(argv[i], "--screensaver") == 0)
         {
@@ -98,6 +93,7 @@ int main(int argc, char **argv)
 
         if (screensaver_mode && getch() != ERR)
         {
+            handle_sigint(0);
             break;
         }
         else if (!screensaver_mode)
@@ -105,10 +101,10 @@ int main(int argc, char **argv)
             int c = getch();
             switch (c) {
                 case KEY_UP:
-                    gravity_mod += 0.1;
+                    audio.noise_reduction += 1.0;
                     break;
                 case KEY_DOWN:
-                    gravity_mod -= 0.1;
+                    audio.noise_reduction -= 1.0;
                     break;
                 case KEY_LEFT:
                     audio.color_theme -= 1;
@@ -116,6 +112,9 @@ int main(int argc, char **argv)
                     break;
                 case KEY_RIGHT:
                     audio.color_theme = (audio.color_theme + 1) % 7;
+                    break;
+                case 'd':
+                    audio.debug = audio.debug == 1 ? 0: 1;
                     break;
             }
 
@@ -143,12 +142,19 @@ void print_help()
     printf("%s",
            "Usage: vumz [OPTION]...\n"
            "\n"
-           "vumz is a simple cli vumeter."
+           "CLI VU Meter Visualizer."
            "\n"
            "Options:\n"
-           "   -D, --debug         debug mode: print useful data for devs\n"
-           "   -h, --help          show help\n"
-           "   -S, --screensaver   screensaver mode: press any key to quit\n"
+           "\t-D, --debug\t\tdebug mode: print useful data\n"
+           "\t-h, --help\t\tshow help\n"
+           "\t-S, --screensaver\tscreensaver mode: press any key to quit\n"
+           "\n"
+           "Keys:\n"
+           "\tLeft\tSwitch to previous color theme\n"
+           "\tRight\tSwitch to next color theme\n"
+           "\tUp\tIncrease noise reduction\n"
+           "\tUp\tDecrease noise reduction\n"
+           "\td\tToggle debug mode\n"
            "\n"
            );
 }

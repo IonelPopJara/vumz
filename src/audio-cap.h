@@ -34,7 +34,7 @@ struct audio_data {
     double framerate;   // Stores the framerate of the vumeter
     pthread_mutex_t lock; // For synchronization
     int terminate;      // To terminate audio thread
-    int wasThisShitWorking; // Boolean to debug stuff
+    int debug; // Boolean to debug stuff
     int color_theme; // Integer within a range to determine the color theme
 };
 
