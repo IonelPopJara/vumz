@@ -273,10 +273,12 @@ void draw_vumeter_data(const struct audio_data* audio) {
     }
     attroff(A_COLOR);
 
+    // Debug
+    if (audio->debug == 1) {
+        mvprintw(0, 0, "Color theme: %d", audio->color_theme);
+        mvprintw(1, 0, "Noise reduction: %.2f", audio->noise_reduction);
+    }
     // Print to debug
-    /*mvprintw(0, 0, "Color theme: %d", audio->color_theme);*/
-    /*mvprintw(1, 0, "Previous height: %d", previous_left_block_height);*/
-    /*mvprintw(2, 0, "IsThisWorking: %d", isThisWorking);*/
     refresh();
 }
 
