@@ -74,6 +74,7 @@ static float amplitude_to_db(float amplitude)
 
 This function was ~~stolen from some random stackoverflow post I don't remember~~ derived from the formula `db = 20 * log10(amplitude)`.
 
+
 The decibel value is then smoothed out by comparing it to the previous captured value using the following function:
 
 ```c
@@ -103,6 +104,9 @@ void apply_smoothing(float* channel_dbs, struct audio_data* audio, int buffer_in
 
 The final value is then used to draw the VU meter using `ncurses`.
 
+The dB value is then compared to the previous value and smoothed out using a function that I reword from the [cava](https://github.com/karlstav/cava) source code. Once the signal has been smoothed out, it is used to draw the VU meter using `ncurses`.
+
+
 ## Man Page
 
 The man page for `vumz` provides ~~not so~~ detailed information about the program.
@@ -131,4 +135,3 @@ After playing around with [cava](https://github.com/karlstav/cava) and [cbonsai]
 - [x] Add more color options
 - [ ] Adjust sensitivity
 - [ ] Make the rendering more "fancy" by adding stuff such as "particles" or a 3D effect.
-
