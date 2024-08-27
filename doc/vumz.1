@@ -11,7 +11,7 @@ is a simple command-line VU meter visualizer that uses ncurses and PipeWire to d
 .SH OPTIONS
 .TP
 .B \-D, \-\-debug
-Enable debug mode, which prints useful data for developers.
+Enable debug mode, which prints useful data.
 .TP
 .B \-S, \-\-screensaver
 Enable screensaver mode, allowing you to press any key to quit.
@@ -20,13 +20,22 @@ Enable screensaver mode, allowing you to press any key to quit.
 Display a help message and exit.
 
 .SH INTERACTIVE COMMANDS
-The smooth factor controls how smoothly the VU meter responds to changes in audio levels.
+The noise reduction factor controls how smoothly the VU meter responds to changes in audio levels.
+.TP
+.B KEY_LEFT
+Switch to previous color theme.
+.TP
+.B KEY_RIGHT
+Switch to next color theme.
 .TP
 .B KEY_UP
-Increase the smooth factor.
+Increase noise reduction.
 .TP
 .B KEY_DOWN
-Decrease the smooth factor.
+Decrease noise reduction.
+.TP
+.B d
+Toggle debug mode.
 
 .SH EXAMPLES
 .TP
@@ -46,7 +55,7 @@ Start the VU meter visualizer in screensaver mode.
 .BR
 
 .SH BUGS
-When it first runs, all the squares are colored up.
+Please document if you find any bugs.
 
 .SH AUTHOR
 Ionel Pop <ionelalexandru.pop@gmail.com>
