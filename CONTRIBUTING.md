@@ -25,7 +25,7 @@ You can contribute to VUMZ in several ways:
 
 When contributing code to VUMZ, please adhere to the following coding conventions:
 
-- Formatting: 4 space indentation, or tabs if you prefer. Follow the existing style of the codebase. Curly braces on a new line for functions and control structures.
+- Formatting: 4 space indentation, or tabs if you prefer. Follow the existing style of the codebase.
 
 - Naming: Use descriptive names for variables, functions, and structures. Follow snake_case for function, variable names, and structure members.
 
