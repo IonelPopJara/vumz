@@ -24,6 +24,16 @@ sudo dnf install pipewire pipewire-devel ncurses ncurses-devel
 sudo apt install libncurses5-dev libncursesw5-dev libpipewire-0.3-dev
 ```
 
+### Arch
+```bash
+sudo pacman -S pipewire ncurses
+```
+
+### Void
+```bash
+sudo xbps-install -S pipewire-devel ncurses-devel
+```
+
 // TODO: Add instructions for other distributions
 
 ### Building from source
