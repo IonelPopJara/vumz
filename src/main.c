@@ -114,7 +114,11 @@ int main(int argc, char **argv)
                     audio.color_theme = (audio.color_theme + 1) % 7;
                     break;
                 case 'd':
-                    audio.debug = audio.debug == 1 ? 0: 1;
+                    audio.debug = audio.debug == 1 ? 0 : 1;
+                    break;
+                case 'q': // Quit on 'q'
+                case 27: // Escape key (ASCII 27)
+                    handle_sigint(0);
                     break;
             }
 
@@ -142,8 +146,7 @@ void print_help()
     printf("%s",
            "Usage: vumz [OPTION]...\n"
            "\n"
-           "CLI VU Meter Visualizer."
-           "\n"
+           "CLI VU Meter Visualizer.\n"
            "Options:\n"
            "\t-D, --debug\t\tdebug mode: print useful data\n"
            "\t-h, --help\t\tshow help\n"
@@ -153,8 +156,10 @@ void print_help()
            "\tLeft\tSwitch to previous color theme\n"
            "\tRight\tSwitch to next color theme\n"
            "\tUp\tIncrease noise reduction\n"
-           "\tUp\tDecrease noise reduction\n"
+           "\tDown\tDecrease noise reduction\n"
            "\td\tToggle debug mode\n"
+           "\tq\tQuit\n"
+           "\tEscape\tQuit\n"
            "\n"
            );
 }
@@ -170,4 +175,3 @@ void handle_sigint(int sig) {
     printf("Thank you for using vumz :)\n");
     exit(EXIT_SUCCESS);
 }
-
