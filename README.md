@@ -19,6 +19,11 @@ To install vumz, you need to have `ncurses` and `pipewire` installed on your sys
 sudo dnf install pipewire pipewire-devel ncurses ncurses-devel
 ```
 
+### Ubuntu (22.04+)
+```bash
+sudo apt install libncurses5-dev libncursesw5-dev libpipewire-0.3-dev
+```
+
 // TODO: Add instructions for other distributions
 
 ### Building from source
