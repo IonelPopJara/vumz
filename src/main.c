@@ -25,7 +25,7 @@
 
 // Required argp variables for program information
 const char *argp_program_version = "vumz 1.0";
-const char *argp_program_bug_address = "mults@intheblackmedia.com";
+const char *argp_program_bug_address = "ionelalexandru.pop@gmail.com";
 
 // Program documentation
 static char doc[] = "VUMZ -- CLI VU Meter Visualizer\v"
