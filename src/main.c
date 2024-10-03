@@ -17,21 +17,80 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <argp.h>
 #include "audio-cap.h"
 #include "audio-out.h"
 
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 
-void print_help();
+// Required argp variables for program information
+const char *argp_program_version = "vumz 1.0";
+const char *argp_program_bug_address = "mults@intheblackmedia.com";
+
+// Program documentation
+static char doc[] = "VUMZ -- CLI VU Meter Visualizer\v"
+                    "Keys:\n"
+                    "\tLeft\tSwitch to previous color theme\n"
+                    "\tRight\tSwitch to next color theme\n"
+                    "\tUp\tIncrease noise reduction\n"
+                    "\tDown\tDecrease noise reduction\n"
+                    "\td\tToggle debug mode\n"
+                    "\tq\tQuit\n"
+                    "\tEscape\tQuit";
+
+static char args_doc[] = "";
+
+// Command-line options for argp
+static struct argp_option options[] = {
+    {"debug",      'D', 0, 0, "Debug mode: print useful data"},
+    {"screensaver",'S', 0, 0, "Screensaver mode: press any key to quit"},
+    {0}
+};
+
+// Structure to store parsed arguments
+struct arguments {
+    bool debug_mode;
+    bool screensaver_mode;
+};
+
 long long current_time_in_ns();
 void handle_sigint(int sig);
 
 static double framerate = 60.0;
 static double noise_reduction = 77.0;
 
+// Callback function for parsing individual options
+static error_t parse_opt(int key, char *arg, struct argp_state *state) {
+    struct arguments *arguments = state->input;
+
+    switch (key) {
+        case 'D':
+            arguments->debug_mode = true;
+            break;
+        case 'S':
+            arguments->screensaver_mode = true;
+            break;
+        case ARGP_KEY_ARG:
+            return 0;
+        default:
+            return ARGP_ERR_UNKNOWN;
+    }
+    return 0;
+}
+
+// argp parser configuration
+static struct argp argp = {options, parse_opt, args_doc, doc};
+
 int main(int argc, char **argv)
 {
     signal(SIGINT, handle_sigint); // Set up signal interrupt
+
+    // Initialize and parse command-line arguments
+    struct arguments arguments = {
+        .debug_mode = false,
+        .screensaver_mode = false
+    };
+    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
     pthread_t audio_thread;
     struct audio_data audio = {};
@@ -44,40 +103,15 @@ int main(int argc, char **argv)
     audio.mem[0] = -60.0f;
     audio.mem[1] = -60.0f;
     audio.terminate = 0;
-    audio.debug = 0;
+    audio.debug = arguments.debug_mode;
     audio.color_theme = 2;
 
     pthread_mutex_init(&audio.lock, NULL);
 
     // Create a thread to run the input function
     if (pthread_create(&audio_thread, NULL, input_pipewire, (void*)&audio) != 0) {
-        fprintf(stderr, "Error");
+        fprintf(stderr, "Error creating audio thread\n");
         return EXIT_FAILURE;
-    }
-
-    bool screensaver_mode = false;
-
-    // Check command line arguments
-    for (int i = 1; i < argc; i++)
-    {
-        if (strcmp(argv[i], "-D") == 0 || strcmp(argv[i], "--debug") == 0)
-        {
-            audio.debug = 1;
-        }
-        else if (strcmp(argv[i], "-S") == 0 || strcmp(argv[i], "--screensaver") == 0)
-        {
-            screensaver_mode = true;
-        }
-        else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
-        {
-            print_help();
-            exit(EXIT_SUCCESS);
-        }
-        else {
-            printf("error: invalid option %s\n", argv[i]);
-            print_help();
-            exit(EXIT_FAILURE);
-        }
     }
 
     printf("Initializing\n");
@@ -91,12 +125,12 @@ int main(int argc, char **argv)
     {
         long long start_time_ns = current_time_in_ns();
 
-        if (screensaver_mode && getch() != ERR)
+        if (arguments.screensaver_mode && getch() != ERR)
         {
             handle_sigint(0);
             break;
         }
-        else if (!screensaver_mode)
+        else if (!arguments.screensaver_mode)
         {
             int c = getch();
             switch (c) {
@@ -136,32 +170,11 @@ int main(int argc, char **argv)
     }
 
     if (pthread_join(audio_thread, NULL) != 0) {
-        fprintf(stderr, "Error");
+        fprintf(stderr, "Error joining audio thread\n");
         return EXIT_FAILURE;
     }
-}
 
-void print_help()
-{
-    printf("%s",
-           "Usage: vumz [OPTION]...\n"
-           "\n"
-           "CLI VU Meter Visualizer.\n"
-           "Options:\n"
-           "\t-D, --debug\t\tdebug mode: print useful data\n"
-           "\t-h, --help\t\tshow help\n"
-           "\t-S, --screensaver\tscreensaver mode: press any key to quit\n"
-           "\n"
-           "Keys:\n"
-           "\tLeft\tSwitch to previous color theme\n"
-           "\tRight\tSwitch to next color theme\n"
-           "\tUp\tIncrease noise reduction\n"
-           "\tDown\tDecrease noise reduction\n"
-           "\td\tToggle debug mode\n"
-           "\tq\tQuit\n"
-           "\tEscape\tQuit\n"
-           "\n"
-           );
+    return EXIT_SUCCESS;
 }
 
 long long current_time_in_ns() {
@@ -175,3 +188,4 @@ void handle_sigint(int sig) {
     printf("Thank you for using vumz :)\n");
     exit(EXIT_SUCCESS);
 }
+
