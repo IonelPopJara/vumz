@@ -53,6 +53,9 @@ static void on_process(void *userdata) {
             max = fmaxf(max, fabsf(samples[n]));
         }
 
+	// Adjust for sensitivity
+	max *= audio->sensitivity;
+
         if (c == 0) {
             // Process left channel audio
             float left_channel_dbs = amplitude_to_db(max);

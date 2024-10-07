@@ -27,6 +27,7 @@ struct audio_data {
     int n_channels;     // Number of channels (buffer size)
     float audio_out_buffer[2];   // Output buffer of size 2 (2 channels)
     float audio_out_buffer_prev[2];   // Previous output buffer
+    float sensitivity;  // Adjusting sensitivity based on amplitude
     float peak[2];      // For smoothing
     float fall[2];      // For smoothing
     float mem[2];       // For smoothing

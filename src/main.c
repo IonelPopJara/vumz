@@ -28,6 +28,7 @@ void handle_sigint(int sig);
 
 static double framerate = 60.0;
 static double noise_reduction = 77.0;
+static float sensitivity = 0.5;
 
 int main(int argc, char **argv)
 {
@@ -41,6 +42,7 @@ int main(int argc, char **argv)
     audio.audio_out_buffer_prev[1] = -60.0f;
     audio.audio_out_buffer[0] = -60.0f;
     audio.audio_out_buffer[1] = -60.0f;
+    audio.sensitivity = sensitivity;
     audio.mem[0] = -60.0f;
     audio.mem[1] = -60.0f;
     audio.terminate = 0;
@@ -116,6 +118,12 @@ int main(int argc, char **argv)
                 case 'd':
                     audio.debug = audio.debug == 1 ? 0 : 1;
                     break;
+		case 43: // Plus sign (+)
+		    audio.sensitivity += 0.1;
+		    break;
+		case 45: // Minus sign (-)
+		    audio.sensitivity -= 0.1;
+		    break;
                 case 'q': // Quit on 'q'
                 case 27: // Escape key (ASCII 27)
                     handle_sigint(0);
@@ -123,6 +131,7 @@ int main(int argc, char **argv)
             }
 
             audio.noise_reduction = CLAMP(audio.noise_reduction, 0, 200);
+	    audio.sensitivity = CLAMP(audio.sensitivity, 0.0, 1.0);
         }
 
         // Draw vumeter data
@@ -157,7 +166,9 @@ void print_help()
            "\tRight\tSwitch to next color theme\n"
            "\tUp\tIncrease noise reduction\n"
            "\tDown\tDecrease noise reduction\n"
-           "\td\tToggle debug mode\n"
+	   "\tPlus\tIncrease sensitivity\n"
+	   "\tMinus\tDecrease sensitivity\n"
+	   "\td\tToggle debug mode\n"
            "\tq\tQuit\n"
            "\tEscape\tQuit\n"
            "\n"

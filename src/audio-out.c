@@ -277,6 +277,7 @@ void draw_vumeter_data(const struct audio_data* audio) {
     if (audio->debug == 1) {
         mvprintw(0, 0, "Color theme: %d", audio->color_theme);
         mvprintw(1, 0, "Noise reduction: %.2f", audio->noise_reduction);
+	mvprintw(2, 0, "Sensitivity: %.2f", audio->sensitivity);
     }
     // Print to debug
     refresh();
