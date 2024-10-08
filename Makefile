@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g -I/usr/include/pipewire-0.3 -I/usr/include/spa-0.2
-LDFLAGS = -lncurses -lpipewire-0.3 -lm
+LDFLAGS = -lncursesw -lpipewire-0.3 -lm
 
 SRC = src/main.c src/audio-out.c src/audio-cap.c
 OBJ = $(SRC:.c=.o)
