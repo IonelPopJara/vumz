@@ -1,3 +1,5 @@
 # Ignore build folder
 /build/
 .cache/
+vumz
+src/*.o

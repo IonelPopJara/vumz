@@ -40,16 +40,23 @@ sudo xbps-install -S pipewire-devel ncurses-devel
 
 Once you have the dependencies installed, you can clone the repository and install the program using the following commands:
 
+##### Using the script
 ```bash
+cd vumz/
 chmod +x install.sh
 ./install.sh
-```
-
-To uninstall the program, you can run the following commands:
-
-```bash
+# To uninstall vumz
 chmod +x uninstall.sh
 ./uninstall.sh
+```
+
+##### Or using the Makefile
+```bash
+cd vumz/
+make
+sudo make install
+# As for uninstalling vumz use the following command
+sudo make uninstall
 ```
 
 ## Usage
@@ -65,11 +72,12 @@ Options:
     -S, --screensaver   screensaver mode: press any key to quit
 
 Keys:
-    Left    Switch to previous color theme
-    Right   Switch to next color theme
-    Up      Increase noise reduction
-    Up      Decrease noise reduction
-    d       Toggle debug mode
+    Left        Switch to previous color theme
+    Right       Switch to next color theme
+    Up          Increase noise reduction
+    Up          Decrease noise reduction
+    d           Toggle debug mode
+    q/Escape    Quit
 ```
 ## How it works
 
