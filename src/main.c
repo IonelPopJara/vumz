@@ -55,6 +55,7 @@ struct arguments {
 
 long long current_time_in_ns();
 void handle_sigint(int sig);
+void cleanup_resources(struct audio_data* audio, pthread_t* audio_thread, bool ncurses_initialized, bool mutex_initialized);
 
 static double framerate = 60.0;
 static double noise_reduction = 77.0;
@@ -106,17 +107,34 @@ int main(int argc, char **argv)
     audio.debug = arguments.debug_mode;
     audio.color_theme = 2;
 
-    pthread_mutex_init(&audio.lock, NULL);
+    bool ncurses_initialized = false;
+    bool mutex_initialized = false;
+
+    // Initialize the mutex and check for errors
+    if (pthread_mutex_init(&audio.lock, NULL) != 0) {
+        fprintf(stderr, "Error initializing mutex\n");
+        cleanup_resources(&audio, &audio_thread, ncurses_initialized, mutex_initialized);
+        return EXIT_FAILURE;
+    }
+    mutex_initialized = true;
 
     // Create a thread to run the input function
     if (pthread_create(&audio_thread, NULL, input_pipewire, (void*)&audio) != 0) {
         fprintf(stderr, "Error creating audio thread\n");
+        cleanup_resources(&audio, &audio_thread, ncurses_initialized, mutex_initialized);
         return EXIT_FAILURE;
     }
 
     printf("Initializing\n");
     setlocale(LC_ALL, ""); // Set locale so unicode characters work properly
-    init_ncurses();
+
+    // Initialize ncurses and check for errors
+    if (init_ncurses() != 0) {
+        fprintf(stderr, "Error initializing ncurses\n");
+        cleanup_resources(&audio, &audio_thread, ncurses_initialized, mutex_initialized);
+        return EXIT_FAILURE;
+    }
+    ncurses_initialized = true;
 
     const long long target_frame_time_ns = 16666666LL; // 16.67 milliseconds in nanoseconds (1/60 in ms)
 
@@ -169,10 +187,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (pthread_join(audio_thread, NULL) != 0) {
-        fprintf(stderr, "Error joining audio thread\n");
-        return EXIT_FAILURE;
-    }
+    // Clean up properly when the main loop ends
+    cleanup_resources(&audio, &audio_thread, ncurses_initialized, mutex_initialized);
 
     return EXIT_SUCCESS;
 }
@@ -187,5 +203,26 @@ void handle_sigint(int sig) {
     cleanup_ncurses();
     printf("Thank you for using vumz :)\n");
     exit(EXIT_SUCCESS);
+}
+
+// Cleanup function to release resources in case of errors
+void cleanup_resources(struct audio_data* audio, pthread_t* audio_thread, bool ncurses_initialized, bool mutex_initialized) {
+    // Clean up ncurses only if it was initialized
+    if (ncurses_initialized) {
+        cleanup_ncurses();
+    }
+
+    // Wait for the audio thread to finish if it was created
+    if (audio_thread && audio->terminate == 0) {
+        audio->terminate = 1;
+        if (pthread_join(*audio_thread, NULL) != 0) {
+            fprintf(stderr, "Error joining audio thread\n");
+        }
+    }
+
+    // Destroy the mutex only if it was initialized
+    if (mutex_initialized) {
+        pthread_mutex_destroy(&audio->lock);
+    }
 }
 
